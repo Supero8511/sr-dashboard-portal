@@ -1,0 +1,29 @@
+name: update-dashboard
+on:
+  schedule:
+    - cron: '0 21 4,14 * *'   # 매월 5일·15일 06:00 KST
+  workflow_dispatch:
+  push:
+    paths: ['data/manual/**']  # KB 엑셀 커밋 시 자동 재빌드
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pandas numpy openpyxl
+      - name: build data
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          KOSIS_API_KEY: ${{ secrets.KOSIS_API_KEY }}
+          ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
+        run: python scripts/build_data.py
+      - name: commit
+        run: |
+          git config user.name sr-bot && git config user.email bot@users.noreply.github.com
+          git add docs/data.js
+          git diff --cached --quiet || git commit -m "data update $(date +%F)"
+          git push
