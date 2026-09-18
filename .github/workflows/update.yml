@@ -1,47 +1,29 @@
-git : 'git' 용어가 cmdlet, 함수, 스크립트 파일 또는 실행할 수 있는 프로그램 이름으로 인식되지 않습니다. 이름이 정확한지
- 확인하고 경로가 포함된 경우 경로가 올바른지 검증한 다음 다시 시도하십시오.
-위치 줄:1 문자:1
-+ git push -u origin main --force
-+ ~~~
-    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
-    + FullyQualifiedErrorId : CommandNotFoundException
-
-git : 'git' 용어가 cmdlet, 함수, 스크립트 파일 또는 실행할 수 있는 프로그램 이름으로 인식되지 않습니다. 이름이 정확한지
- 확인하고 경로가 포함된 경우 경로가 올바른지 검증한 다음 다시 시도하십시오.
-위치 줄:2 문자:1
-+ git remote add origin https://github.com/Supero8511/sr-dashboard-port ...
-+ ~~~
-    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
-    + FullyQualifiedErrorId : CommandNotFoundException
-
-git : 'git' 용어가 cmdlet, 함수, 스크립트 파일 또는 실행할 수 있는 프로그램 이름으로 인식되지 않습니다. 이름이 정확한지
- 확인하고 경로가 포함된 경우 경로가 올바른지 검증한 다음 다시 시도하십시오.
-위치 줄:3 문자:1
-+ git branch -M main
-+ ~~~
-    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
-    + FullyQualifiedErrorId : CommandNotFoundException
-
-git : 'git' 용어가 cmdlet, 함수, 스크립트 파일 또는 실행할 수 있는 프로그램 이름으로 인식되지 않습니다. 이름이 정확한지
- 확인하고 경로가 포함된 경우 경로가 올바른지 검증한 다음 다시 시도하십시오.
-위치 줄:4 문자:1
-+ git commit -m "Update dashboard: landing page + cbank live refresh"
-+ ~~~
-    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
-    + FullyQualifiedErrorId : CommandNotFoundException
-
-git : 'git' 용어가 cmdlet, 함수, 스크립트 파일 또는 실행할 수 있는 프로그램 이름으로 인식되지 않습니다. 이름이 정확한지
- 확인하고 경로가 포함된 경우 경로가 올바른지 검증한 다음 다시 시도하십시오.
-위치 줄:5 문자:1
-+ git add -A
-+ ~~~
-    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
-    + FullyQualifiedErrorId : CommandNotFoundException
-
-git : 'git' 용어가 cmdlet, 함수, 스크립트 파일 또는 실행할 수 있는 프로그램 이름으로 인식되지 않습니다. 이름이 정확한지
- 확인하고 경로가 포함된 경우 경로가 올바른지 검증한 다음 다시 시도하십시오.
-위치 줄:6 문자:1
-+ git init
-+ ~~~
-    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException
-    + FullyQualifiedErrorId : CommandNotFoundException
+name: update-dashboard
+on:
+  schedule:
+    - cron: '0 21 4,14 * *'   # 매월 5일·15일 06:00 KST
+  workflow_dispatch:
+  push:
+    paths: ['data/manual/**']  # KB 엑셀 커밋 시 자동 재빌드
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install pandas numpy openpyxl
+      - name: build data
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          KOSIS_API_KEY: ${{ secrets.KOSIS_API_KEY }}
+          ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
+        run: python scripts/build_data.py
+      - name: commit
+        run: |
+          git config user.name sr-bot && git config user.email bot@users.noreply.github.com
+          git add docs/data.js
+          git diff --cached --quiet || git commit -m "data update $(date +%F)"
+          git push
