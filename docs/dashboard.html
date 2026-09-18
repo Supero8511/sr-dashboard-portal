@@ -207,6 +207,7 @@ function el(tag, cls, html) {
   if (html != null) e.innerHTML = html;
   return e;
 }
+
 /* ═══════════════ SR 생활비지수 탭 ═══════════════ */
 function buildSrPane(pane) {
   const wrap = el("div", "wrap");
@@ -466,6 +467,7 @@ function buildPceSection(wrap) {
   renderTabs();
   renderBody();
 }
+
 /* ═══════════════ 중앙은행 통화정책회의 일정 ═══════════════
    탭을 열 때마다(+ 버튼 클릭 시) docs/cbank.js를 브라우저 캐시 없이 다시 받아온다.
    즉 Claude가 결과를 반영해 커밋하면, 페이지를 새로 배포/빌드하지 않아도
