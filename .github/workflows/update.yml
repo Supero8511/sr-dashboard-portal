@@ -1,7 +1,7 @@
 name: update-dashboard
 on:
   schedule:
-    - cron: '0 21 4,14 * *'   # 매월 5일·15일 06:00 KST
+    - cron: '0 1 * * *'   # 매일 10:00 KST
   workflow_dispatch:
   push:
     paths: ['data/manual/**']  # KB 엑셀 커밋 시 자동 재빌드
