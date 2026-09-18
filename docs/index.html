@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SR지수 · 경제지표 통합 포털</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f6f9;color:#1a2230;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#1f5fd6}
+
+/* ── 상단 헤더 · 탭 네비게이션 ── */
+.portal-header{max-width:1080px;margin:0 auto;padding:26px 22px 4px}
+.portal-header h1{font-size:1.5rem;margin:0 0 4px;letter-spacing:-0.3px}
+.portal-header .sub{color:#7a8696;font-size:.85rem;margin-bottom:18px}
+.portal-nav{position:sticky;top:0;background:#f4f6f9cc;backdrop-filter:blur(6px);z-index:5;border-bottom:1px solid #e3e8ef;padding:10px 22px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
+.portal-nav .tabs{display:flex;gap:6px;flex-wrap:wrap}
+.portal-nav button{font-family:inherit;font-size:13.5px;font-weight:600;padding:8px 16px;border-radius:999px;border:1px solid #dbe4f0;background:#fff;color:#44505f;cursor:pointer;white-space:nowrap}
+.portal-nav button.on{background:#1f5fd6;border-color:#1f5fd6;color:#fff}
+.portal-nav button:hover:not(.on){border-color:#1f5fd6;color:#1f5fd6}
+.portal-nav .refresh{margin-left:auto;font-size:13px;font-weight:600;padding:8px 14px;border-radius:999px;border:1px solid #dbe4f0;background:#fff;color:#5b6776;cursor:pointer}
+.portal-nav .refresh:hover{border-color:#1f5fd6;color:#1f5fd6}
+.portal-footer{max-width:1080px;margin:8px auto 40px;padding:0 22px;color:#97a2b1;font-size:.75rem;line-height:1.7}
+
+/* ── 공통 카드·섹션 (외부지표 핸드오프 6.5 CSS 그대로) ─────────── */
+.wrap { max-width: 1080px; margin: 0 auto; padding: 20px 22px 60px; }
+.section {
+  background: #fff; border: 1px solid #e3e8ef; border-radius: 14px;
+  margin-bottom: 16px; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(20,30,50,.04);
+}
+.section-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid #eef1f6;
+}
+.section-head .num {
+  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px;
+  background: #1f5fd6; color: #fff; font-weight: 700; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+.section-head h3 { margin: 0; font-size: 15px; letter-spacing: -0.2px; }
+.section-head .src { margin: 2px 0 0; font-size: 12px; color: #7a8696; }
+.section-head .src b { color: #4a5564; font-weight: 600; }
+.views { display: grid; gap: 16px; padding: 16px 18px 20px; }
+.views.two { grid-template-columns: 1fr 1fr; }
+@media (max-width: 900px) { .views.two { grid-template-columns: 1fr; } }
+.view-card { border: 1px solid #edf0f5; border-radius: 10px; overflow: hidden; background: #fcfcfe; }
+.view-card .vhead {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 8px 12px; font-size: 12.5px; color: #44505f; background: #f7f9fc;
+  border-bottom: 1px solid #edf0f5;
+}
+.view-card .vhead a { color: #1f5fd6; text-decoration: none; font-size: 12px; white-space: nowrap; }
+.view-card .vhead a:hover { text-decoration: underline; }
+.imgbox { position: relative; min-height: 180px; display: flex; align-items: center; justify-content: center; padding: 6px; }
+.imgbox img { max-width: 100%; height: auto; display: block; border-radius: 4px; }
+.imgbox .state { font-size: 13px; color: #8a96a6; text-align: center; padding: 30px 16px; line-height: 1.8; }
+.imgbox .state a { color: #1f5fd6; }
+.updated-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: #5b6776; background: #eaeef4;
+  border-radius: 999px; padding: 5px 12px; margin-bottom: 14px;
+}
+.hint {
+  font-size: 12px; color: #97a2b1; text-align: center; margin-top: 24px; line-height: 1.7;
+}
+.run-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#fff7e6; border:1px solid #f3d9a4; border-radius:10px; padding:10px 14px; margin-bottom:14px; }
+.run-btn { font-family:inherit; font-size:12.5px; font-weight:700; padding:6px 14px; border-radius:8px; border:1px solid #e0a92e; background:#fff; color:#8a5a00; cursor:pointer; white-space:nowrap; }
+.run-btn:hover { background:#fff2d9; }
+.run-status { font-size:12px; color:#8a6d3b; line-height:1.5; }
+
+/* ── PCE 인플레이션 확산 지표 ─────────────────── */
+.pce-body { padding: 16px 18px 20px; }
+.pce-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.pce-stat {
+  background: #f7f9fc; border: 1px solid #edf0f5; border-radius: 9px;
+  padding: 8px 14px; font-size: 12px; color: #5b6776;
+}
+.pce-stat b { display: block; font-size: 17px; color: #1a2230; font-variant-numeric: tabular-nums; letter-spacing: -0.2px; }
+.pce-head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.pce-ctitle { font-size: 12.5px; color: #44505f; font-weight: 600; }
+.pce-ranges { display: flex; gap: 4px; flex-wrap: wrap; }
+.pce-ranges button {
+  font-family: inherit; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid #dbe4f0; background: #fff; color: #5b6776; cursor: pointer;
+}
+.pce-ranges button:hover { border-color: #1f5fd6; color: #1f5fd6; }
+.pce-ranges button.on { background: #1f5fd6; border-color: #1f5fd6; color: #fff; }
+.pce-chartbox { position: relative; }
+.pce-chartbox svg { display: block; width: 100%; height: 300px; }
+.pce-tip {
+  position: absolute; pointer-events: none; background: #0e1a2b; color: #f0f4fa;
+  border-radius: 7px; padding: 6px 10px; font-size: 12px; line-height: 1.5;
+  display: none; white-space: nowrap; transform: translate(-50%, -115%);
+  font-variant-numeric: tabular-nums; z-index: 3;
+}
+.pce-details { margin-top: 12px; }
+.pce-details summary { font-size: 12.5px; color: #1f5fd6; cursor: pointer; user-select: none; }
+.pce-tblwrap { overflow-x: auto; border: 1px solid #edf0f5; border-radius: 10px; margin-top: 10px; }
+.pce-tbl { border-collapse: collapse; width: 100%; min-width: 740px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pce-tbl th, .pce-tbl td { padding: 5px 7px; text-align: right; border-bottom: 1px solid #f2f4f8; }
+.pce-tbl thead th { color: #8a96a6; font-weight: 600; background: #f7f9fc; font-size: 11.5px; }
+.pce-tbl tbody th { text-align: left; padding-left: 12px; color: #1a2230; }
+.pce-tbl td.avgcol, .pce-tbl th.avgcol { border-left: 1px solid #edf0f5; color: #5b6776; }
+.pce-tbl tbody tr:last-child th, .pce-tbl tbody tr:last-child td { border-bottom: none; }
+.pce-note { font-size: 11.5px; color: #97a2b1; margin-top: 10px; line-height: 1.7; }
+.pce-tabs { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+.pce-tabs button {
+  font-family: inherit; font-size: 12.5px; padding: 5px 13px; border-radius: 8px;
+  border: 1px solid #dbe4f0; background: #fff; color: #5b6776; cursor: pointer; font-weight: 600;
+}
+.pce-tabs button:hover { border-color: #1f5fd6; color: #1f5fd6; }
+.pce-tabs button.on { background: #1f5fd6; border-color: #1f5fd6; color: #fff; }
+.pce-empty { padding: 46px 20px; text-align: center; color: #8a96a6; font-size: 13.5px; line-height: 1.9; }
+.pce-empty b { color: #44505f; }
+
+/* ── 중앙은행 통화정책회의 일정 ─────────────────── */
+.cb-next { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.cb-next-item {
+  display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e3e8ef;
+  border-radius: 10px; padding: 9px 14px; font-size: 13px; color: #44505f;
+}
+.cb-next-item .cb-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.cb-next-item b { font-weight: 700; }
+.cb-next-item .dday {
+  font-size: 11.5px; font-weight: 700; color: #fff; background: #1f5fd6;
+  border-radius: 999px; padding: 2px 8px;
+}
+.cb-next-item .dday.today { background: #c2273d; }
+.cb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 14px; }
+.cb-card { background: #fff; border: 1px solid #e3e8ef; border-radius: 12px; overflow: hidden; }
+.cb-card-head { padding: 12px 15px 10px; border-bottom: 1px solid #eef1f6; border-top: 3px solid; }
+.cb-card-head h4 { margin: 0; font-size: 14.5px; letter-spacing: -0.2px; display: flex; align-items: center; gap: 8px; }
+.cb-card-head .cb-now {
+  margin-left: auto; font-size: 12px; font-weight: 700; color: #1a2230;
+  background: #eef2f8; border-radius: 6px; padding: 2px 8px;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.cb-card-head .cb-full { margin: 2px 0 0; font-size: 11.5px; color: #7a8696; }
+.cb-card-head .cb-time { margin: 5px 0 0; font-size: 11px; color: #97a2b1; line-height: 1.5; }
+.cb-list { list-style: none; margin: 0; padding: 6px 0; }
+.cb-list li {
+  display: flex; align-items: center; gap: 8px; padding: 6px 15px; font-size: 13px; color: #34404e;
+}
+.cb-list li .cb-idx { color: #b4bdc9; font-size: 11px; width: 14px; flex: none; text-align: right; }
+.cb-list li .cb-date { font-variant-numeric: tabular-nums; font-weight: 600; }
+.cb-list li .cb-note {
+  font-size: 10.5px; font-weight: 700; color: #7a3fb8; background: #f3ecfb;
+  border-radius: 6px; padding: 1px 6px; flex: none;
+}
+.cb-list li .cb-rate {
+  font-size: 11px; font-weight: 700; color: #5b6776; background: #f2f4f8;
+  border-radius: 6px; padding: 1px 7px; flex: none;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.cb-list li .cb-rate.up { color: #c2273d; background: #fdecef; }
+.cb-list li .cb-rate.down { color: #1f5fd6; background: #e9f1fd; }
+.cb-list li .cb-val { font-size: 10.5px; color: #8b95a3; flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cb-list li.past { color: #b4bdc9; }
+.cb-list li.past .cb-date { font-weight: 500; }
+.cb-list li.past .cb-note { color: #b4bdc9; background: #f2f4f8; }
+.cb-list li.next { background: #f2f7ff; }
+.cb-list li .dday {
+  margin-left: auto; font-size: 11px; font-weight: 700; color: #1f5fd6;
+  background: #e3edfd; border-radius: 999px; padding: 2px 8px; flex: none;
+}
+.cb-list li .dday.today { color: #fff; background: #c2273d; }
+.cb-empty { padding: 26px 15px; font-size: 12.5px; color: #8a96a6; text-align: center; line-height: 1.8; }
+.cb-note-year { margin-top: 12px; font-size: 12px; color: #97a2b1; }
+
+/* ── SR지수 탭 전용 ── */
+.chartbox{position:relative;height:300px}
+</style>
+</head><body>
+
+<div class="portal-header">
+  <h1>SR지수 · 경제지표 통합 포털</h1>
+  <div class="sub">한국·미국 생활비지수(SR)와 주요 거시경제지표를 한 화면에서 확인합니다.</div>
+</div>
+<div class="portal-nav">
+  <div class="tabs" id="nav"></div>
+  <button class="refresh" id="refreshBtn">🔄 새로고침</button>
+</div>
+<div id="content"></div>
+<div class="portal-footer">
+  본 포털은 개인 연구용 가공 지표를 포함하며 공식 통계가 아닙니다. SR지수는 매월 5일·15일 GitHub Actions가 자동 갱신하고,
+  물가·통화/고용/경기·심리 지표는 페이지를 열 때마다 브라우저가 공개 API에서 직접 조회합니다 (탭 하단 안내 참조).
+</div>
+
+<script src="data.js"></script>
+<script src="macro_client.js"></script>
+<script src="pce_data.js"></script>
+<script src="cbank.js"></script>
+<script>
+function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+}
+
+/* ═══════════════ SR 생활비지수 탭 ═══════════════ */
+function buildSrPane(pane) {
+  const wrap = el("div", "wrap");
+  pane.appendChild(wrap);
+  const D = (typeof DATA !== "undefined") ? DATA : window.DATA;
+  if (!D) { wrap.appendChild(el("div", "pce-empty", "SR지수 데이터(data.js)를 불러오지 못했습니다.")); return; }
+
+  wrap.appendChild(el("div", "updated-chip",
+    `데이터 빌드: ${D.meta.built} (${D.meta.source}) · 산식 고정: 0.7 소비물가 + 0.3 주택가격 (전년동월비)`));
+
+  const months = o => Object.keys(o).sort();
+  const last = o => { const k = months(o); return [k[k.length - 1], o[k[k.length - 1]]]; };
+  const roll = (o, n) => { const ks = months(o), out = {}; for (let i = 0; i < ks.length; i++) { const w = ks.slice(Math.max(0, i - n + 1), i + 1).map(k => o[k]); out[ks[i]] = w.reduce((a, b) => a + b, 0) / w.length; } return out; };
+  const align = (...objs) => { const ks = months(objs[0]).filter(k => objs.every(o => k in o)); return [ks, objs.map(o => ks.map(k => o[k]))]; };
+
+  const [mS, vS] = last(D.kr.sr), [mC, vC] = last(D.kr.cpi), [mP, vP] = last(D.kr.spread), [mM, vM] = last(D.kr.m2);
+  wrap.appendChild(el("div", "pce-stats",
+    `<div class="pce-stat">한국 SR지수 (${mS})<b style="color:#c0392b">${vS.toFixed(1)}%</b></div>` +
+    `<div class="pce-stat">한국 CPI (${mC})<b>${vC.toFixed(1)}%</b></div>` +
+    `<div class="pce-stat">스프레드 (${mP})<b>${vP >= 0 ? "+" : ""}${vP.toFixed(1)}%p</b></div>` +
+    `<div class="pce-stat">M2 증가율 (${mM})<b style="color:#2e6da4">${vM.toFixed(1)}%</b></div>`));
+
+  function chartSection(num, title, srcHtml) {
+    const sec = el("div", "section");
+    const head = el("div", "section-head");
+    head.appendChild(el("div", "num", String(num)));
+    const hmeta = el("div");
+    hmeta.appendChild(el("h3", null, title));
+    hmeta.appendChild(el("p", "src", srcHtml));
+    head.appendChild(hmeta);
+    sec.appendChild(head);
+    const body = el("div", "pce-body");
+    const box = el("div", "chartbox");
+    const canvas = document.createElement("canvas");
+    box.appendChild(canvas);
+    body.appendChild(box);
+    sec.appendChild(body);
+    wrap.appendChild(sec);
+    return canvas;
+  }
+
+  const c1 = chartSection(1, "한국 — SR지수 vs CPI (전년동월비 %)",
+    "출처: 통계청(자가주거비포함 CPI) · KB부동산(아파트 매매지수, 전국) · 산식 0.7×소비 + 0.3×주택");
+  const c2 = chartSection(2, "한국 — 스프레드 (SR − CPI, %p)",
+    "SR지수와 일반 CPI의 격차 · 양(+)이면 자산 인플레이션이 소비자물가보다 빠르게 상승 중");
+  const c3 = chartSection(3, "한국 — M2 경고등 (전년동월비 vs 10년 이동평균)",
+    "출처: 한국은행 ECOS(M2 평잔, 원계열, 신·구계열 2004-10 접합) · 유동성이 10년 평균 대비 얼마나 이탈했는지");
+  const c4 = chartSection(4, "미국 — SR지수 vs CPI (전년동월비 %)",
+    "출처: 미국 BEA(PCEPI) · S&amp;P 케이스-실러 전국주택가격지수 · 산식 0.7×PCEPI + 0.3×케이스실러");
+
+  Chart.defaults.color = "#44505f";
+  Chart.defaults.borderColor = "#eef1f6";
+  Chart.defaults.font.family = "'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif";
+  const opt = { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false }, plugins: { legend: { labels: { boxWidth: 12 } } }, scales: { x: { ticks: { maxTicksLimit: 8 } } }, elements: { point: { radius: 0 } } };
+  const lineChart = (canvas, labels, dsets) => new Chart(canvas, { type: "line", data: { labels, datasets: dsets }, options: opt });
+
+  { const [k, [a, b]] = align(D.kr.sr, D.kr.cpi); lineChart(c1, k, [{ label: "SR지수", data: a, borderColor: "#c0392b", borderWidth: 2 }, { label: "CPI", data: b, borderColor: "#7f8c8d", borderWidth: 1.5 }]); }
+  { const [k, [a]] = align(D.kr.spread); new Chart(c2, { type: "bar", data: { labels: k, datasets: [{ label: "스프레드", data: a, backgroundColor: a.map(v => v >= 0 ? "#c0392b99" : "#2e6da499") }] }, options: opt }); }
+  { const m10 = roll(D.kr.m2, 120); const [k, [a, b]] = align(D.kr.m2, m10); lineChart(c3, k, [{ label: "M2 yoy", data: a, borderColor: "#2e6da4", borderWidth: 2 }, { label: "10년 이동평균", data: b, borderColor: "#8a96a6", borderDash: [6, 4], borderWidth: 1.5 }]); }
+  { const [k, [a, b]] = align(D.us.sr, D.us.cpi); lineChart(c4, k, [{ label: "SR지수(미국)", data: a, borderColor: "#c0392b", borderWidth: 2 }, { label: "CPI(미국)", data: b, borderColor: "#7f8c8d", borderWidth: 1.5 }]); }
+
+  wrap.appendChild(el("div", "hint",
+    "산식: 한국 = 0.7×자가주거비포함CPI + 0.3×KB아파트 매매지수(전국) · 미국 = 0.7×PCEPI + 0.3×케이스-실러 전국 (전년동월비 기준).<br>" +
+    "출처: 통계청, KB부동산 데이터허브(가공값), 한국은행 ECOS(M2 신·구계열 2004.10 증감률 접합, 단차 약 1%p), FRED(PCEPI·CSUSHPISA·CPIAUCSL·M2SL).<br>" +
+    "시리즈별 최신월이 다를 수 있음(ECOS M2 약 2개월 지연). 본 지수는 개인 연구용 가공 지표로 공식 통계가 아님. 매월 5일·15일 GitHub Actions가 자동 재계산합니다."));
+}
+
+/* ═══════════════ PCE 확산 지표 (핸드오프 6.6 그대로) ═══════════════ */
+function buildPcePane(pane) {
+  const wrap = el("div", "wrap");
+  buildPceSection(wrap);
+  wrap.appendChild(el("div", "hint", "그래프 위에 마우스를 올리면 각 월의 수치를 확인할 수 있습니다.<br>갱신은 Claude에 \"PCE 확산 지표 업데이트해줘\"라고 요청하거나 <code>docs/pce_data.js</code>의 해당 기준 values 배열에 새 월 값을 추가하면 됩니다."));
+  pane.appendChild(wrap);
+}
+
+function buildPceSection(wrap) {
+  const P = window.PCE_BREADTH;
+  if (!P || !P.series) return;
+  const KEYS = ["m12", "m6", "m3"].filter(k => P.series[k]);
+  const sec = el("div", "section");
+  const head = el("div", "section-head");
+  const hmeta = el("div");
+  const h3 = el("h3", null, "");
+  const src = el("p", "src", "");
+  hmeta.appendChild(h3); hmeta.appendChild(src);
+  head.appendChild(hmeta);
+  const tabs = el("div", "pce-tabs");
+  head.appendChild(tabs);
+  sec.appendChild(head);
+  const body = el("div", "pce-body");
+  sec.appendChild(body);
+  wrap.appendChild(sec);
+
+  let cur = KEYS[0];
+  function renderTabs() {
+    tabs.innerHTML = "";
+    KEYS.forEach(k => {
+      const b = el("button", k === cur ? "on" : null, P.series[k].label + " 기준");
+      b.onclick = () => { if (cur !== k) { cur = k; renderTabs(); renderBody(); } };
+      tabs.appendChild(b);
+    });
+  }
+  function renderBody() {
+  const S = P.series[cur];
+  h3.textContent = "미국 인플레이션 확산 지표 — " + (S.title || "");
+  src.innerHTML = "출처: <b>" + P.source + "</b> · 월간 · 데이터 갱신 " + P.updated;
+  body.innerHTML = "";
+  if (buildPceSection._ro) { buildPceSection._ro.disconnect(); buildPceSection._ro = null; }
+  const DATA = S.values || [];
+  if (!DATA.length) {
+    body.appendChild(el("div", "pce-empty",
+      "아직 <b>" + esc(S.label) + " 기준</b> 데이터가 없습니다.<br>" +
+      "원 차트 이미지나 수치를 Claude에 전달하면 이 화면에 채워집니다. (<code>docs/pce_data.js</code>의 " + cur + ".values)"));
+    return;
+  }
+  const start = S.start || P.start;
+  const N = DATA.length;
+  const ym = i => { const t = (start[0]*12 + start[1]-1) + i; return [Math.floor(t/12), t%12+1]; };
+  const lab = i => { const [y,m] = ym(i); return y + "-" + String(m).padStart(2,"0"); };
+  const yearFrac = i => { const [y,m] = ym(i); return y + (m-1)/12; };
+  const AVG = (() => { const v = DATA.filter((_,i) => ym(i)[0] < 2020); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : DATA.reduce((a,b)=>a+b,0)/N; })();
+  const last = DATA[N-1], prev = N > 1 ? DATA[N-2] : DATA[N-1];
+  const peakI = DATA.indexOf(Math.max(...DATA));
+  const f1 = v => v.toFixed(1);
+  const ACCENT = "#8e1f30", GRID = "#f0f2f6", MUTE = "#8a96a6", AVGC = "#b9c2cf";
+
+  body.appendChild(el("div", "pce-stats",
+    "<div class='pce-stat'>최신 (" + lab(N-1) + ")<b>" + f1(last) + "%</b></div>" +
+    "<div class='pce-stat'>전월대비<b>" + (last-prev>=0?"+":"") + f1(last-prev) + "p</b></div>" +
+    "<div class='pce-stat'>~2019 평균<b>" + f1(AVG) + "%</b></div>" +
+    "<div class='pce-stat'>고점 (" + lab(peakI) + ")<b>" + f1(DATA[peakI]) + "%</b></div>" +
+    (N > 12 ? "<div class='pce-stat'>12개월 전<b>" + f1(DATA[N-13]) + "%</b></div>" : "")));
+
+  const headRow = el("div", "pce-head-row");
+  headRow.appendChild(el("div", "pce-ctitle", "3% 초과 품목 비중 (%) · 월간 — 평균 상회 폭이 클수록 인플레이션이 광범위"));
+  const ranges = el("div", "pce-ranges");
+  headRow.appendChild(ranges);
+  body.appendChild(headRow);
+
+  const box = el("div", "pce-chartbox");
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "PCE 3% 초과 품목 비중 월별 추이");
+  const tip = el("div", "pce-tip");
+  box.appendChild(svg); box.appendChild(tip);
+  body.appendChild(box);
+
+  const RANGES = [
+    { n: "전체", from: 0 },
+    { n: "2010~", from: (2010-start[0])*12 - (start[1]-1) },
+    { n: "2020~", from: (2020-start[0])*12 - (start[1]-1) },
+    { n: "최근 36개월", from: N-36 }
+  ];
+  let rangeFrom = 0;
+
+  function draw() {
+    const W = box.clientWidth, H = 300;
+    if (!W) return;
+    const M = { l: 32, r: 12, t: 12, b: 24 };
+    const pw = W - M.l - M.r, ph = H - M.t - M.b;
+    const d = DATA.slice(rangeFrom);
+    const x0 = yearFrac(rangeFrom), x1 = yearFrac(N-1);
+    const ymax = Math.min(100, Math.ceil((Math.max.apply(null, d.concat([AVG]))+3)/10)*10);
+    const X = i => M.l + (yearFrac(i)-x0)/((x1-x0)||1)*pw;
+    const Y = v => M.t + (1 - v/ymax)*ph;
+    let s = "";
+    for (let g = 0; g <= ymax; g += 10) {
+      s += "<line x1='" + M.l + "' y1='" + Y(g) + "' x2='" + (W-M.r) + "' y2='" + Y(g) + "' stroke='" + GRID + "' stroke-width='1'/>";
+      s += "<text x='" + (M.l-7) + "' y='" + (Y(g)+4) + "' text-anchor='end' font-size='10.5' fill='" + MUTE + "'>" + g + "</text>";
+    }
+    const span = x1-x0;
+    const step = span > 18 ? 5 : (span > 7 ? 2 : 1);
+    for (let y = Math.ceil(x0/step)*step; y <= x1; y += step) {
+      const px = M.l + (y-x0)/(x1-x0)*pw;
+      s += "<text x='" + px + "' y='" + (H-7) + "' text-anchor='middle' font-size='10.5' fill='" + MUTE + "'>" + (step>=5 ? String(y).slice(2) : y) + "</text>";
+    }
+    s += "<line x1='" + M.l + "' y1='" + Y(AVG) + "' x2='" + (W-M.r) + "' y2='" + Y(AVG) + "' stroke='" + AVGC + "' stroke-width='1.4' stroke-dasharray='5 4'/>";
+    s += "<text x='" + (M.l+6) + "' y='" + (Y(AVG)-6) + "' font-size='10.5' fill='" + MUTE + "'>~2019 평균 " + f1(AVG) + "%</text>";
+    let p = "";
+    d.forEach((v, j) => { const i = rangeFrom + j; p += (j ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1) + " "; });
+    s += "<path d='" + p + "' fill='none' stroke='" + ACCENT + "' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>";
+    const ex = X(N-1), ey = Y(last);
+    s += "<circle cx='" + ex + "' cy='" + ey + "' r='4' fill='" + ACCENT + "' stroke='#fff' stroke-width='2'/>";
+    s += "<text x='" + (ex-6) + "' y='" + (ey-10) + "' text-anchor='end' font-size='12' font-weight='700' fill='" + ACCENT + "'>" + f1(last) + "%</text>";
+    s += "<line id='pce-xh' x1='0' y1='" + M.t + "' x2='0' y2='" + (M.t+ph) + "' stroke='" + MUTE + "' stroke-width='1' stroke-dasharray='3 3' visibility='hidden'/>";
+    s += "<circle id='pce-xhd' r='4' fill='" + ACCENT + "' stroke='#fff' stroke-width='2' visibility='hidden'/>";
+    svg.setAttribute("height", H);
+    svg.innerHTML = s;
+    svg._map = { X, Y, x0, x1, M, pw };
+  }
+  svg.addEventListener("mousemove", ev => {
+    if (!svg._map) return;
+    const r = svg.getBoundingClientRect();
+    const { X, Y, x0, x1, M, pw } = svg._map;
+    const yf = x0 + (ev.clientX - r.left - M.l)/pw*(x1-x0);
+    let i = Math.round((yf - start[0])*12) - (start[1]-1);
+    i = Math.max(rangeFrom, Math.min(N-1, i));
+    const v = DATA[i];
+    const xh = svg.querySelector("#pce-xh"), xhd = svg.querySelector("#pce-xhd");
+    xh.setAttribute("x1", X(i)); xh.setAttribute("x2", X(i)); xh.setAttribute("visibility", "visible");
+    xhd.setAttribute("cx", X(i)); xhd.setAttribute("cy", Y(v)); xhd.setAttribute("visibility", "visible");
+    tip.style.display = "block";
+    tip.style.left = X(i) + "px";
+    tip.style.top = Y(v) + "px";
+    tip.innerHTML = lab(i) + "<br><b>" + f1(v) + "%</b> <span style='opacity:.75'>(평균 " + (v-AVG>=0?"+":"") + f1(v-AVG) + "p)</span>";
+  });
+  svg.addEventListener("mouseleave", () => {
+    tip.style.display = "none";
+    const a = svg.querySelector("#pce-xh"), b = svg.querySelector("#pce-xhd");
+    if (a) { a.setAttribute("visibility", "hidden"); b.setAttribute("visibility", "hidden"); }
+  });
+  RANGES.forEach((r, k) => {
+    const b = el("button", k === 0 ? "on" : null, r.n);
+    b.onclick = () => {
+      rangeFrom = Math.max(0, r.from);
+      ranges.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+      draw();
+    };
+    ranges.appendChild(b);
+  });
+  if (window.ResizeObserver) { buildPceSection._ro = new ResizeObserver(() => draw()); buildPceSection._ro.observe(box); }
+  else window.addEventListener("resize", draw);
+  draw();
+
+  // 연도×월 표
+  const det = el("details", "pce-details");
+  det.open = true;
+  det.appendChild(el("summary", null, "기간별 수치 표 (연도 × 월, 단위 %)"));
+  const tw = el("div", "pce-tblwrap");
+  const years = {};
+  DATA.forEach((v, i) => { const [y, m] = ym(i); (years[y] = years[y] || Array(12).fill(null))[m-1] = v; });
+  let h = "<thead><tr><th style='text-align:left;padding-left:12px'>연도</th>";
+  for (let m = 1; m <= 12; m++) h += "<th>" + m + "월</th>";
+  h += "<th class='avgcol'>평균</th></tr></thead><tbody>";
+  Object.keys(years).map(Number).sort((a, b) => b - a).forEach(y => {
+    const row = years[y], vs = row.filter(v => v != null);
+    const avg = vs.reduce((a, b) => a + b, 0) / vs.length;
+    h += "<tr><th>" + y + "</th>";
+    row.forEach(v => {
+      if (v == null) { h += "<td style='color:#c3cad4'>·</td>"; return; }
+      const t = Math.max(0, Math.min(1, v/80));
+      h += "<td style='background:rgba(142,31,48," + (t*0.30).toFixed(2) + ")'>" + v.toFixed(1) + "</td>";
+    });
+    h += "<td class='avgcol'>" + avg.toFixed(1) + "</td></tr>";
+  });
+  h += "</tbody>";
+  const tbl = el("table", "pce-tbl", h);
+  tw.appendChild(tbl);
+  det.appendChild(tw);
+  body.appendChild(det);
+
+  let logHtml = S.note ? "데이터: " + esc(S.note) + "<br>" : "";
+  logHtml += "갱신 기록: " + (S.log || []).map(u => u.date + " (" + esc(u.note) + ")").join(" · ") +
+    " — 갱신은 <code>docs/pce_data.js</code>의 " + cur + ".values 배열에 새 월 값을 추가하면 됩니다.";
+  body.appendChild(el("div", "pce-note", logHtml));
+  }
+  renderTabs();
+  renderBody();
+}
+
+/* ═══════════════ 중앙은행 통화정책회의 일정 (핸드오프 6.6 그대로) ═══════════════ */
+function buildCbankPane(pane) {
+  const wrap = el("div", "wrap");
+  const D = window.CBANK_DATA;
+  if (!D || !D.years) {
+    wrap.appendChild(el("div", "pce-empty", "일정 데이터(<code>docs/cbank.js</code>)를 불러오지 못했습니다."));
+    pane.appendChild(wrap); return;
+  }
+  const YEARS = Object.keys(D.years).sort();
+  const WD = ["일", "월", "화", "수", "목", "금", "토"];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const parse = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const fmtD = (s, withYear) => {
+    const d = parse(s);
+    return (withYear ? d.getFullYear() + "." : "") + (d.getMonth() + 1) + "/" + d.getDate() + "(" + WD[d.getDay()] + ")";
+  };
+  const fmtRange = mt => {
+    const a = parse(mt[0]);
+    if (!mt[1]) return fmtD(mt[0]);
+    const b = parse(mt[1]);
+    return (a.getMonth() + 1) + "/" + a.getDate() + "(" + WD[a.getDay()] + ")~" +
+      (b.getMonth() === a.getMonth() ? "" : (b.getMonth() + 1) + "/") + b.getDate() + "(" + WD[b.getDay()] + ")";
+  };
+  const decDate = mt => parse(mt[1] || mt[0]);  // 결정 발표일 = 2일 회의 종료일
+  const ddayTxt = d => {
+    const n = Math.round((d - today) / 86400000);
+    return n === 0 ? "오늘" : n > 0 ? "D-" + n : null;
+  };
+  const rateTxt = s => s.slice(s.indexOf(" ") + 1);  // "인상 3.00%" → "3.00%"
+  const rateCls = s => s.startsWith("인상") ? " up" : s.startsWith("인하") ? " down" : "";
+  const valTxt = s => { const d = parse(s); return "발효 " + (d.getMonth() + 1) + "/" + d.getDate(); };  // ECB: 결정일 ≠ 발효일(value date)
+
+  let cur = YEARS.includes(String(today.getFullYear())) ? String(today.getFullYear()) : YEARS[0];
+
+  const chip = el("div", "updated-chip", "일정 기준: " + D.updated + " · 각 은행 공식 발표 일정 (결정 발표일은 회의 마지막 날)");
+  const tabs = el("div", "pce-tabs");
+  tabs.style.marginBottom = "14px";
+  const nextBox = el("div", "cb-next");
+  const grid = el("div", "cb-grid");
+  const yearNote = el("div", "cb-note-year");
+  wrap.appendChild(chip); wrap.appendChild(tabs); wrap.appendChild(nextBox); wrap.appendChild(grid); wrap.appendChild(yearNote);
+  wrap.appendChild(el("div", "hint",
+    "회색 = 지난 회의 · 파란 배경 = 각 은행의 다음 회의 · 지난 회의 옆 배지 = 결정 결과(<span style='color:#c2273d;font-weight:700'>인상</span>/<span style='color:#1f5fd6;font-weight:700'>인하</span>/동결, ECB는 수신금리 기준 — 금리 변경 시 '발효 M/D' = value date) · <b>SEP</b> = 연준 경제전망, <b>전망보고서</b> = BOJ 전망리포트<br>" +
+    "갱신은 Claude에 \"통화정책 일정 업데이트해줘\"라고 요청하거나 <code>docs/cbank.js</code>에 직접 추가하면 됩니다."));
+
+  function render() {
+    tabs.innerHTML = "";
+    YEARS.forEach(y => {
+      const b = el("button", y === cur ? "on" : null, y + "년");
+      b.onclick = () => { if (cur !== y) { cur = y; render(); } };
+      tabs.appendChild(b);
+    });
+    const Y = D.years[cur];
+    nextBox.innerHTML = ""; grid.innerHTML = "";
+
+    // 은행별 다음 회의 스트립 (오늘 이후 첫 회의)
+    D.banks.forEach(bk => {
+      const ms = Y[bk.key];
+      if (!ms) return;
+      const nx = ms.find(mt => decDate(mt) >= today);
+      if (!nx) return;
+      const item = el("div", "cb-next-item");
+      const dot = el("span", "cb-dot"); dot.style.background = bk.color;
+      item.appendChild(dot);
+      item.insertAdjacentHTML("beforeend", "<b>" + esc(bk.name) + "</b> " + esc(fmtRange(nx)));
+      const dd = ddayTxt(decDate(nx));
+      if (dd) item.appendChild(el("span", "dday" + (dd === "오늘" ? " today" : ""), dd));
+      nextBox.appendChild(item);
+    });
+
+    // 은행별 카드
+    D.banks.forEach(bk => {
+      const card = el("div", "cb-card");
+      const head = el("div", "cb-card-head");
+      head.style.borderTopColor = bk.color;
+      // 현재 금리 = 전체 연도에서 결과가 기입된 마지막(발표일 기준) 회의의 결정치
+      let nowR = null;
+      YEARS.forEach(y => (((D.years[y] || {})[bk.key]) || []).forEach(mt => { if (mt[3]) nowR = mt[3]; }));
+      head.innerHTML = "<h4>" + esc(bk.name) +
+        (nowR ? "<span class='cb-now'>현재 " + esc(rateTxt(nowR)) + "</span>" : "") +
+        "</h4><p class='cb-full'>" + esc(bk.full) + "</p>" +
+        "<p class='cb-time'>" + esc(bk.time) + "</p>";
+      card.appendChild(head);
+      const ms = Y[bk.key];
+      if (!ms) {
+        card.appendChild(el("div", "cb-empty",
+          "아직 미발표<br>" + esc(bk.name) + "은 통상 전년 10월말~11월에<br>다음해 일정을 확정 발표합니다."));
+      } else {
+        const list = el("ul", "cb-list");
+        const nxIdx = ms.findIndex(mt => decDate(mt) >= today);
+        ms.forEach((mt, i) => {
+          const past = decDate(mt) < today;
+          const li = el("li", past ? "past" : (i === nxIdx ? "next" : null));
+          li.appendChild(el("span", "cb-idx", String(i + 1)));
+          li.appendChild(el("span", "cb-date", fmtRange(mt)));
+          if (mt[3]) li.appendChild(el("span", "cb-rate" + rateCls(mt[3]), mt[3]));
+          if (mt[4]) li.appendChild(el("span", "cb-val", valTxt(mt[4])));
+          if (mt[2]) li.appendChild(el("span", "cb-note", mt[2]));
+          if (i === nxIdx) { const dd = ddayTxt(decDate(mt)); if (dd) li.appendChild(el("span", "dday" + (dd === "오늘" ? " today" : ""), dd)); }
+          list.appendChild(li);
+        });
+        card.appendChild(list);
+      }
+      grid.appendChild(card);
+    });
+
+    yearNote.textContent = (D.notes && D.notes[cur]) ? "※ " + D.notes[cur] : "";
+  }
+  render();
+  pane.appendChild(wrap);
+}
+
+/* ═══════════════ 탭 네비게이션 배선 ═══════════════ */
+const TABS = [
+  { key: "sr", label: "SR 생활비지수", render: buildSrPane },
+  { key: "prices", label: "물가·통화", render: pane => buildMacroPane(pane, { group: "prices" }) },
+  { key: "labor", label: "고용", render: pane => buildMacroPane(pane, { group: "labor" }) },
+  { key: "activity", label: "경기·심리", render: pane => buildMacroPane(pane, { group: "activity" }) },
+  { key: "pce", label: "PCE 확산 지표", render: buildPcePane },
+  { key: "cbank", label: "통화정책 일정", render: buildCbankPane }
+];
+const navEl = document.getElementById("nav");
+const contentEl = document.getElementById("content");
+let currentTab = null;
+
+function showTab(key) {
+  currentTab = key;
+  Array.from(navEl.children).forEach(b => b.classList.toggle("on", b.dataset.key === key));
+  contentEl.innerHTML = "";
+  const t = TABS.find(t => t.key === key);
+  try { t.render(contentEl); }
+  catch (e) { contentEl.appendChild(el("div", "wrap", "<div class='pce-empty'>렌더링 오류: " + esc(String((e && e.message) || e)) + "</div>")); }
+}
+TABS.forEach(t => {
+  const b = document.createElement("button");
+  b.textContent = t.label;
+  b.dataset.key = t.key;
+  b.onclick = () => showTab(t.key);
+  navEl.appendChild(b);
+});
+document.getElementById("refreshBtn").onclick = () => showTab(currentTab);
+showTab("sr");
+</script>
+</body></html>
