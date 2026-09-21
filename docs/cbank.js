@@ -5,7 +5,14 @@
      · FOMC: federalreserve.gov/monetarypolicy/fomccalendars.htm (2027은 tentative)
      · BOJ: boj.or.jp 2026·2027 MPM 일정 PDF
      · ECB: ecb.europa.eu Governing Council 캘린더 (통화정책회의만)
-   - 갱신: Claude에 "통화정책 일정 업데이트해줘" 요청, 또는 years에 직접 추가
+   - 갱신(2026-09-21부터): FOMC/BOK/ECB는 scripts/update_cbank.py를
+     .github/workflows/update-cbank.yml이 6시간마다 실행해 공식 소스(FRED
+     DFEDTARU/DFEDTARL, ECOS 722Y001/0101000, ECB Data Portal
+     FM.D.U2.EUR.4F.KR.DFR.LEV)에서 직접 확인 후 사람 승인 없이 자동 커밋한다
+     (저장소 소유자의 명시적 요청 — methodology_external.md '통화정책회의 데이터
+     규약' 참조. 원천이 애매하면 절대 추정하지 않고 건너뛴다). BOJ는 신뢰할 만한
+     공식 숫자 API가 없어 여전히 수동: Claude에 "통화정책 일정 업데이트해줘"
+     요청, 또는 years에 직접 추가.
      (이 파일을 커밋하면 dashboard.html의 "통화정책 일정" 탭 🔄 이 표만 새로고침 버튼으로 즉시 반영됨 — 새 배포 불필요)
    - 회의 항목 형식: [시작일, 종료일(1일 회의는 null), 비고(없으면 null), 결과, 발효일]
      결정 발표일 = 종료일(2일 회의) 또는 시작일(1일 회의)
