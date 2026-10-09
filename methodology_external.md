@@ -1,8 +1,9 @@
-# 외부 경제지표 — 카탈로그·원천·함정 (물가·통화 / 고용 / 경기·심리 / PCE확산 / 통화정책일정 탭)
+# 외부 경제지표 — 카탈로그·원천·함정 (물가·통화 / 고용 / 경기·심리 / PCE확산 / 통화정책일정 / 지표금리 / SEP점도표 / 재정적자 / 자동차대출연체율 탭)
 
-> SR지수(`methodology.md`)와 별개로, 이 문서는 `docs/macro_client.js` · `docs/pce_data.js` · `docs/cbank.js`가
-> 다루는 외부 공개지표의 원천·수집 방식·알려진 함정을 정리한다. 전부 외부 공개 데이터이며, 사내 시스템 데이터는
-> 어떤 형태로도 이 저장소에 포함하지 않는다(아래 "포함 금지" 참조).
+> SR지수(`methodology.md`)와 별개로, 이 문서는 `docs/macro_client.js` · `docs/pce_data.js` · `docs/cbank.js` ·
+> `docs/rates.js` · `docs/dots.js` · `docs/fiscal.js` · `docs/delinq.js`가 다루는 외부 공개지표의 원천·수집
+> 방식·알려진 함정을 정리한다. 전부 외부 공개 데이터이며, 사내 시스템 데이터는 어떤 형태로도 이 저장소에
+> 포함하지 않는다(아래 "포함 금지" 참조).
 
 ## 포함 금지 (반드시 지킬 것)
 
@@ -16,7 +17,13 @@
 - **브라우저 직접 수집**: `docs/macro_client.js`는 페이지가 열릴 때마다 방문자의 브라우저에서 공개 API를 직접 호출한다(서버 빌드 없음). 아래 원천은 전부 CORS 허용이 확인된 것들이다.
 - **원천별 독립 실패 처리**: `Promise.allSettled`로 병렬 조회하며, 실패한 지표만 실패 사유 칩으로 표시한다 — 한 원천이 죽어도 나머지는 정상 표시된다.
 - **수동 보정 오버레이**(`docs/macro_manual.json`): 모든 시리즈 키에 범용 적용 — 같은 월은 수동값이 우선, 없는 월은 추가. 무료 미러의 결측·오염 보정용.
-- **정적 데이터 파일**: PCE 확산 지표(`docs/pce_data.js`)는 정적 JS 파일 — 갱신은 사람(또는 Claude)이 수행한다. 통화정책 일정(`docs/cbank.js`)도 정적 JS 파일이지만, 2026-09-21부터 FOMC/BOK/ECB 항목은 GitHub Actions가 자동으로 채운다(아래 "통화정책회의 데이터 규약" 참조) — BOJ만 여전히 사람(또는 Claude) 수동.
+- **정적 데이터 파일**: PCE 확산 지표(`docs/pce_data.js`)는 정적 JS 파일 — 갱신은 사람(또는 Claude)이 수행한다.
+  통화정책 일정(`docs/cbank.js`)도 정적 JS 파일이지만, 2026-09-21부터 FOMC/BOK/ECB 항목은 GitHub Actions가
+  자동으로 채운다(아래 "통화정책회의 데이터 규약" 참조) — BOJ만 여전히 사람(또는 Claude) 수동.
+  2026-10-09부터 추가된 지표금리 현황(`docs/rates.js`)·SEP 점도표(`docs/dots.js`)·재정적자(`docs/fiscal.js`)·
+  자동차대출 연체율(`docs/delinq.js`)도 같은 패턴 — GitHub Actions(`update-extra.yml`, 매일)가 API 키가
+  필요한 원천을 서버에서 조회해 정적 JS 파일에 커밋하고, 화면은 cbank.js와 동일하게 탭을 열 때마다
+  캐시 없이 다시 받아 그 파일을 그대로 그린다(아래 "보조 지표 자동화" 참조).
 - 외부 라이브러리 0 — 차트는 인라인 SVG로 직접 생성한다(hover 툴팁, 기간 버튼, 기준선, 결측월 선 분절, ResizeObserver 반응형).
 
 ## 지표 카탈로그
@@ -36,8 +43,13 @@
 | PCE 확산 지표 | BEA Underlying Detail `2.4.4U` 엑셀 | 말단 품목 217개 자체 계산 | (수동) | 아래 "PCE 확산 지표 방법론" |
 | 통화정책 일정·결과(FOMC/BOK/ECB) | FRED / ECOS / ECB Data Portal 공식 API(자동) | `docs/cbank.js` 정적 데이터, `scripts/update_cbank.py`가 갱신 | FRED·ECOS 키 | 아래 "통화정책회의 데이터 규약" |
 | 통화정책 일정·결과(BOJ) | 공식 발표(성명 PDF) + 보도 교차검증(수동) | `docs/cbank.js` 정적 데이터 | 불필요 | 아래 "통화정책회의 데이터 규약" |
+| 지표금리 현황(미국 SOFR75−IORB) | FRED API(자동) | `docs/rates.js`, `scripts/update_rates.py` | FRED 키 | 아래 "보조 지표 자동화" |
+| 지표금리 현황(한국 콜금리−기준금리) | 한국은행 ECOS API(자동) | `docs/rates.js`, `scripts/update_rates.py` | ECOS 키 | KOFR 대체 — 아래 "보조 지표 자동화" |
+| FOMC 점도표(SEP, 중앙값 전망경로) | 연준 공식 발표표(HTML, 자동) | `docs/dots.js`, `scripts/update_dots.py` | 불필요 | 아래 "보조 지표 자동화" |
+| 재정적자(기초/총/순이자, %GDP) | FRED FYFSD·FYOINT·FYGDP(OMB 공식, 자동) | `docs/fiscal.js`, `scripts/update_fiscal.py` | FRED 키 | 아래 "보조 지표 자동화" |
+| 자동차대출 90+일 연체 전환율 | NY연은 분기 데이터 파일(자동, 검증 앵커 필수) | `docs/delinq.js`, `scripts/update_delinq.py` | 불필요 | 아래 "보조 지표 자동화" |
 
-**수집 불가로 확정된 것** (재시도 낭비 방지): 신규 실업급여 신청건수(DOL 원천 차단), 내구재 수주·주택허가(Census 차단), 컨퍼런스보드 소비자신뢰(유료), 발틱운임지수 BDI(유료), FRED·ismworld(CORS 차단), 한국은행 ECOS·KOSIS(CORS 차단 → 한국 GDP는 IMF 미러 사용).
+**수집 불가로 확정된 것** (재시도 낭비 방지): 신규 실업급여 신청건수(DOL 원천 차단), 내구재 수주·주택허가(Census 차단), 컨퍼런스보드 소비자신뢰(유료), 발틱운임지수 BDI(유료), FRED·ismworld(CORS 차단), 한국은행 ECOS·KOSIS(CORS 차단 → 한국 GDP는 IMF 미러 사용). KOFR(한국무위험지표금리)은 ECOS에 등록돼 있지 않고 민간 산출기관이 배포해 공식 숫자 API가 없음 — 지표금리 현황 탭에서는 같은 취지의 ECOS 콜금리−기준금리 스프레드로 대체(아래 "보조 지표 자동화" 참조).
 
 ## 원천별 함정 상세
 
@@ -83,5 +95,40 @@
   4·5번째 요소 기입. (`scripts/update_cbank.py`에 `BOJ_STATEMENT_URL` 환경변수로 성명 PDF URL을 직접
   넘기면 그 안의 문구를 파싱해 자동 채택하는 보조 경로가 있지만, URL을 스스로 찾지는 않는다.)
 
+## 보조 지표 자동화 (`docs/rates.js` · `dots.js` · `fiscal.js` · `delinq.js`, 2026-10-09 추가)
+
+> 저장소 소유자가 다른 프로젝트(사내 Treasury 외화 포털)의 핸드오프 문서를 참고해 "없는 자료만 골라와서
+> 같은 형태로" 추가해 달라고 요청했다. 자동화 수준은 "가능한 만큼 완전자동, 애매하면 skip-and-retry"로
+> 명시적으로 합의됨 — cbank.js와 같은 원칙(사람 승인 게이트 없음 + 애매하면 절대 추정하지 않고 skip)을
+> 그대로 적용한다. `.github/workflows/update-extra.yml`이 매일 1회 네 스크립트를 모두 실행하고 변경분만
+> 한 커밋으로 올린다.
+
+- **지표금리 현황**(`scripts/update_rates.py`) — 미국 SOFR(75분위)−IORB, 한국 콜금리(1일물)−기준금리,
+  각각 bp 스프레드 + 20거래일 이동평균. 전부 FRED(`SOFR75`,`IORB`)·ECOS(`817Y002`/`010101000`,
+  `722Y001`/`0101000`) 공식 시리즈만 사용. **원 핸드오프의 'KOFR−콜금리'는 그대로 가져오지 않았다** —
+  KOFR은 ECOS StatisticWord 검색 결과가 없어(민간 산출기관 배포, 공식 숫자 API 미확인) 완전자동화
+  대상에서 제외하고, 같은 취지(시장 자금조달 압력)를 ECOS만으로 완전자동화할 수 있는
+  '콜금리−기준금리' 스프레드로 대체했다. 어느 쪽이든 원천 조회가 실패하면 그 다리(미국 또는 한국)만
+  건너뛰고 기존 값을 유지한다.
+- **FOMC 점도표(SEP)**(`scripts/update_dots.py`) — `docs/cbank.js`의 FOMC 항목 중 비고가 `"SEP"`인
+  회의의 결정일(YYYYMMDD)로 `https://www.federalreserve.gov/monetarypolicy/fomcprojtabl{날짜}.htm`
+  (연준 공식 발표표, HTML)을 열어 "Federal funds rate" 중앙값(median) 행을 가져온다. "Memo: Projected
+  appropriate policy path" 구간에서 그 라벨과 정확히 일치하는 행이 1개가 아니면(0개나, "~월
+  projection" 비교행과 혼동되어 2개 이상 잡히면) 그 회의는 skip. cbank.js가 이미 FOMC·SEP 일정의
+  단일 소스이므로 이 스크립트가 날짜를 별도로 추정하지 않는다.
+- **재정적자**(`scripts/update_fiscal.py`) — FRED `FYFSD`(연방 재정수지)·`FYOINT`(이자지출)·
+  `FYGDP`(GDP), 전부 OMB 공식·연간(회계연도). 기초재정수지(이자 제외) = 총수지 + 이자지출.
+  **검증 앵커**: FY2025 공식 확정치 기준 총수지 ≈ -5.86%, 순이자 ≈ 3.20%, 기초수지 ≈ -2.65%(GDP 대비,
+  허용오차 ±0.5%p) — 계산값이 앵커와 어긋나면(집계 방식이 깨졌을 가능성) 전체를 쓰지 않고 skip.
+- **자동차대출 90+일 연체 전환율**(`scripts/update_delinq.py`) — NY연은 Household Debt and Credit
+  Report가 분기마다 공개하는 인터랙티브용 데이터 파일
+  (`https://www.newyorkfed.org/medialibrary/interactives/householdcredit/data/xls/HHD_C_Report_{YYYY}Q{Q}`,
+  매 릴리스에 1999~최신 전체 히스토리 포함)에서 "Auto Loan" 레이블 행을 찾는다. 이 파일의 시트·행
+  레이아웃은 공식 문서로 고정돼 있지 않아 레이블만으로는 다른 지표(잔액 등) 행과 혼동될 수 있다 — 그래서
+  레이블로 찾은 모든 후보 행 중, 공식 보도자료로 확인한 **검증 앵커 두 분기(2025Q2=2.93%,
+  2026Q2=3.00%)와 정확히 일치하는 단 하나의 후보**만 채택한다. 일치하는 후보가 0개나 2개 이상이면
+  전부 skip — 추정 금지.
+
 ---
-*출처: 2026-09-18 핸드오프 문서 기반, 2026-09-21 통화정책 자동화 반영. 사내 시스템 접근·인증 정보는 일체 포함하지 않는다.*
+*출처: 2026-09-18 핸드오프 문서 기반, 2026-09-21 통화정책 자동화 반영, 2026-10-09 보조 지표(지표금리·SEP점도표·재정적자·자동차대출연체율) 추가.
+사내 시스템 접근·인증 정보는 일체 포함하지 않는다.*

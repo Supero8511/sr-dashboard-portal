@@ -199,6 +199,10 @@ a{color:#1f5fd6}
 <script src="macro_client.js"></script>
 <script src="pce_data.js"></script>
 <script src="cbank.js"></script>
+<script src="rates.js"></script>
+<script src="dots.js"></script>
+<script src="fiscal.js"></script>
+<script src="delinq.js"></script>
 <script>
 function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function el(tag, cls, html) {
@@ -620,6 +624,143 @@ async function renderCbank(wrap, isRetry) {
   render();
 }
 
+/* ═══════════════ 보조 지표(지표금리·SEP 점도표·재정적자·자동차대출 연체율) ═══════════════
+   공통: 정적 JS 데이터 파일(rates.js/dots.js/fiscal.js/delinq.js)을 캐시 없이 다시 받아
+   macro_client.js의 macroSection() 차트 엔진을 그대로 재사용한다(cbank와 동일한
+   "파일을 커밋하면 새 배포 없이 🔄 버튼만으로 반영" 패턴). 갱신 주체는
+   .github/workflows/update-extra.yml(매일) + scripts/update_rates.py 등. */
+async function fetchJsDataLive(file) {
+  const r = await fetch(file + "?t=" + Date.now(), { cache: "no-store" });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  new Function(await r.text())();  // "window.XXX_DATA = {...};" 실행
+}
+
+async function renderStaticMacroPane(wrap, opts) {
+  wrap.innerHTML = "";
+  const row = el("div", "cb-refresh-row");
+  const chip = el("div", "updated-chip", "데이터를 불러오는 중…");
+  const btn = el("button", "cb-refresh-btn", "🔄 새로고침");
+  btn.disabled = true;
+  row.appendChild(chip); row.appendChild(btn);
+  wrap.appendChild(row);
+
+  let D, live = true, errMsg = "";
+  try {
+    await fetchJsDataLive(opts.file);
+    D = window[opts.globalVar];
+    if (!D) throw new Error("데이터 형식 오류");
+  } catch (e) {
+    live = false; errMsg = String((e && e.message) || e);
+    D = window[opts.globalVar];  // 최초 <script src> 로드분으로 폴백
+  }
+
+  btn.disabled = false;
+  btn.onclick = () => renderStaticMacroPane(wrap, opts);
+
+  if (!D) {
+    chip.textContent = "데이터(" + opts.file + ")를 불러오지 못했습니다" + (errMsg ? " (" + errMsg + ")" : "") + ".";
+    return;
+  }
+  chip.textContent = (D.updated ? "데이터 기준: " + D.updated : "") +
+    (live ? " · 서버에서 실시간 확인" : " · 실시간 확인 실패 — 마지막으로 불러온 값 표시 (" + errMsg + ")");
+  if (D.source) wrap.appendChild(el("div", "pce-note", "출처: " + esc(D.source)));
+  opts.build(wrap, D);
+}
+
+function buildRatesPane(pane) {
+  const wrap = el("div", "wrap");
+  pane.appendChild(wrap);
+  renderStaticMacroPane(wrap, { file: "rates.js", globalVar: "RATES_DATA", build: (wrap, D) => {
+    const S = D.series || {};
+    const empty = "아직 지표금리 데이터가 없습니다. GitHub Actions가 처음 실행되면(예약 또는 Actions 탭에서 수동 실행) 채워집니다.";
+    macroSection(wrap, 1, "미국 — SOFR(75분위) − IORB 스프레드",
+      "출처: <b>FRED(SOFR75·IORB)</b> · 일별 · 스프레드가 벌어질수록 레포 시장 자금조달 압력이 커짐(bp)",
+      [{ key: "us_sofr75_iorb_bp", name: "일별", color: "#c9d3e0" },
+       { key: "us_sofr75_iorb_ma20_bp", name: "20거래일 평균", color: "#1f5fd6" }], S,
+      { unit: "bp", dec: 0, baseline: 0, baselineLabel: "0", emptyHtml: empty });
+    macroSection(wrap, 2, "한국 — 콜금리(1일물) − 기준금리 스프레드",
+      "출처: <b>한국은행 ECOS</b>(817Y002 콜금리·722Y001 기준금리) · 일별 · 시장 콜금리가 목표에서 벗어난 정도(bp)",
+      [{ key: "kr_call_base_bp", name: "일별", color: "#f0cf9e" },
+       { key: "kr_call_base_ma20_bp", name: "20거래일 평균", color: "#e0a92e" }], S,
+      { unit: "bp", dec: 0, baseline: 0, baselineLabel: "0", emptyHtml: empty });
+    wrap.appendChild(el("div", "hint",
+      "원 설계(핸드오프 문서)의 'KOFR−콜금리'는 KOFR에 공식 숫자 공개 API가 없어(민간 산출기관 배포) " +
+      "완전자동화 대상에서 빠졌고, 같은 취지(자금조달 압력)를 ECOS로 완전자동화할 수 있는 " +
+      "'콜금리−기준금리' 스프레드로 대체했습니다. 매일 GitHub Actions가 갱신하며, 조회가 애매하면(응답 없음 등) " +
+      "해당 다리만 건너뛰고 다음 실행에서 재시도합니다."));
+  }});
+}
+
+function buildDotsPane(pane) {
+  const wrap = el("div", "wrap");
+  pane.appendChild(wrap);
+  renderStaticMacroPane(wrap, { file: "dots.js", globalVar: "DOTS_DATA", build: (wrap, D) => {
+    const meetings = D.meetings || {};
+    const dates = Object.keys(meetings).sort();
+    if (!dates.length) {
+      wrap.appendChild(el("div", "pce-empty",
+        "아직 SEP 점도표 데이터가 없습니다.<br>FOMC가 경제전망(SEP)을 발표하는 회의(3·6·9·12월) 직후 " +
+        "scripts/update_dots.py가 연준 공식 발표표에서 자동으로 가져옵니다."));
+      return;
+    }
+    const PALETTE = ["#8e1f30", "#1f5fd6", "#e0a92e", "#2e8b57", "#8a96a6", "#c3cad4"];
+    const recent = dates.slice(-6);
+    const S = {}; const lines = [];
+    recent.slice().reverse().forEach((d, idx) => {
+      const med = (meetings[d] || {}).median || {};
+      const obs = Object.keys(med).filter(y => y !== "longrun" && med[y] != null).sort().map(y => [y + "-01", med[y]]);
+      if (!obs.length) return;
+      S[d] = { obs };
+      lines.push({ key: d, name: d + " SEP", color: PALETTE[idx % PALETTE.length] });
+    });
+    macroSection(wrap, 1, "FOMC 점도표(SEP) — 연준 위원 중앙값 전망 경로",
+      "출처: <b>연준 SEP 공식 발표표</b>(federalreserve.gov) · 분기(3·6·9·12월) · 각 선 = 해당 시점에 발표된 향후 정책금리 경로 전망(중앙값)",
+      lines, S, { unit: "%", dec: 2, ranges: [{ n: "전체", f: () => 0 }], initIdx: 0 });
+    const lastMed = (meetings[dates[dates.length - 1]] || {}).median || {};
+    const lr = lastMed.longrun;
+    wrap.appendChild(el("div", "hint",
+      "진한 빨강일수록 최근 발표 · 연도별 점은 해당 SEP에서 위원들이 제시한 그 해 말 정책금리 전망의 중앙값입니다." +
+      (lr != null ? " 가장 최근 발표의 장기(Longer run) 중앙값은 " + lr.toFixed(1) + "%." : "") +
+      " FOMC 회의 직후 자동 갱신되며, 발표표 구조를 명확히 못 찾으면 추정 없이 건너뛰고 다음 회의에서 재시도합니다."));
+  }});
+}
+
+function buildFiscalPane(pane) {
+  const wrap = el("div", "wrap");
+  pane.appendChild(wrap);
+  renderStaticMacroPane(wrap, { file: "fiscal.js", globalVar: "FISCAL_DATA", build: (wrap, D) => {
+    const S = D.series || {};
+    macroSection(wrap, 1, "미국 재정수지 (%GDP, 회계연도)",
+      "출처: <b>FRED FYFSD·FYOINT·FYGDP</b>(OMB 공식) · 연간(회계연도) · 0보다 작으면 적자",
+      [{ key: "total_deficit_pct_gdp", name: "총 재정수지", color: "#8a96a6" },
+       { key: "primary_deficit_pct_gdp", name: "기초재정수지(이자 제외)", color: "#8e1f30" },
+       { key: "net_interest_pct_gdp", name: "순이자지출", color: "#1f5fd6" }], S,
+      { unit: "%", dec: 2, baseline: 0, baselineLabel: "0 (수지균형)",
+        ranges: [{ n: "전체", f: () => 0 }, { n: "20년", f: n => n - 20 }, { n: "10년", f: n => n - 10 }], initIdx: 1,
+        emptyHtml: "아직 재정적자 데이터가 없습니다. GitHub Actions가 처음 실행되면 1962 회계연도부터 채워집니다." });
+    wrap.appendChild(el("div", "hint",
+      "기초재정수지(primary balance) = 총 재정수지 + 순이자지출 — 이자 부담을 제외했을 때의 실질적인 수입·지출 균형입니다. " +
+      "연 1회 정도(회계연도 마감 후) 갱신되며, 2025 회계연도 공식 확정치(OMB)와 대조하는 검증 앵커를 통과해야 반영됩니다."));
+  }});
+}
+
+function buildDelinqPane(pane) {
+  const wrap = el("div", "wrap");
+  pane.appendChild(wrap);
+  renderStaticMacroPane(wrap, { file: "delinq.js", globalVar: "DELINQ_DATA", build: (wrap, D) => {
+    const S = D.series || {};
+    macroSection(wrap, 1, "미국 자동차대출 — 90일 이상 연체 전환율",
+      "출처: <b>NY연은 Household Debt and Credit Report</b> · 분기 · 잔액 대비 연율화 신규 연체 전환 비중(%)",
+      [{ key: "auto_90d_transition_pct", name: "90+일 연체 전환율", color: "#8e1f30" }], S,
+      { unit: "%", dec: 2,
+        emptyHtml: "아직 자동차대출 연체율 데이터가 없습니다. 분기 보고서가 공개되면 scripts/update_delinq.py가 자동으로 채웁니다." });
+    wrap.appendChild(el("div", "hint",
+      "NY연은이 분기마다(2·5·8·11월경) 공개하는 Household Debt and Credit Report의 데이터 파일에서 가져옵니다. " +
+      "엑셀 내부 레이아웃이 문서로 고정돼 있지 않아, 공식 보도자료로 확인한 두 분기 실측값과 정확히 일치하는 " +
+      "행을 찾았을 때만 반영합니다(일치하는 행이 없거나 여러 개면 추정 없이 건너뜁니다)."));
+  }});
+}
+
 /* ═══════════════ 탭 네비게이션 배선 ═══════════════ */
 const TABS = [
   { key: "sr", label: "SR 생활비지수", render: buildSrPane },
@@ -627,7 +768,11 @@ const TABS = [
   { key: "labor", label: "고용", render: pane => buildMacroPane(pane, { group: "labor" }) },
   { key: "activity", label: "경기·심리", render: pane => buildMacroPane(pane, { group: "activity" }) },
   { key: "pce", label: "PCE 확산 지표", render: buildPcePane },
-  { key: "cbank", label: "통화정책 일정", render: buildCbankPane }
+  { key: "cbank", label: "통화정책 일정", render: buildCbankPane },
+  { key: "rates", label: "지표금리 현황", render: buildRatesPane },
+  { key: "dots", label: "SEP 점도표", render: buildDotsPane },
+  { key: "fiscal", label: "재정적자", render: buildFiscalPane },
+  { key: "delinq", label: "자동차대출 연체율", render: buildDelinqPane }
 ];
 const navEl = document.getElementById("nav");
 const contentEl = document.getElementById("content");
