@@ -350,8 +350,11 @@ def kosis_table_groups(org, tbl):
         if not code:
             picked.append("ALL")
     if all(x == "ALL" for x in picked):
-        names = [o.get("ITM_NM") for o in obj if o["OBJ_ID"] == dims[0]][:6]
-        raise RuntimeError(f"총지수/전국 분류값을 찾지 못함(1분류 예: {names})")
+        # 고를 기준값이 없으면 ALL로 받되, 분류가 너무 많은 표(해외 국가별 등)는 제외
+        n_items = sum(1 for o in obj if o["OBJ_ID"] == dims[0])
+        if n_items > 12 or len(dims) > 1:
+            names = [o.get("ITM_NM") for o in obj if o["OBJ_ID"] == dims[0]][:6]
+            raise RuntimeError(f"총지수/전국 분류값을 찾지 못함(1분류 {n_items}개, 예: {names})")
     code1 = "/".join(str(x) for x in picked)
     end = datetime.date.today().strftime("%Y%m")
     url = (f"{KB}Param/statisticsParameterData.do?method=getList&apiKey={KOSIS_KEY}&itmId=ALL"
