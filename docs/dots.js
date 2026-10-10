@@ -1,1 +1,1 @@
-window.DOTS_DATA = {"updated": "", "source": "연준 SEP(Summary of Economic Projections) 공식 발표표, federalreserve.gov", "meetings": {}};
+window.DOTS_DATA = {"updated": "2026-10-10", "source": "연준 SEP(Summary of Economic Projections) 공식 발표표, federalreserve.gov", "meetings": {"2026-03-18": {"median": {"2026": 3.4, "2027": 3.1, "2028": 3.1, "longrun": 3.1}}, "2026-06-17": {"median": {"2026": 3.8, "2027": 3.6, "2028": 3.4, "longrun": 3.1}}, "2026-09-16": {"median": {"2026": 4.1, "2027": 4.1, "2028": 3.9, "2029": 3.6, "longrun": 3.2}}}};
