@@ -21,6 +21,12 @@ jobs:
           KOSIS_API_KEY: ${{ secrets.KOSIS_API_KEY }}
           ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
         run: python scripts/build_data.py
+      - name: probe KB auto-fetch (diagnostic only)
+        if: always()
+        continue-on-error: true
+        run: |
+          pip install PublicDataReader || echo "PublicDataReader install failed"
+          python scripts/probe_kb.py || true
       - name: commit
         run: |
           git config user.name sr-bot && git config user.email bot@users.noreply.github.com
