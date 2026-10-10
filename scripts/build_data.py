@@ -307,9 +307,20 @@ def kosis_meta(org, tbl, typ):
 
 
 def kosis_table_groups(org, tbl):
-    """통계표에서 '총지수'(없으면 첫 분류값)로 월별 자료를 받아 그룹별(항목·보조분류) 시리즈로 분해."""
-    obj = kosis_meta(org, tbl, "OBJ")
-    first_obj = obj[0]["OBJ_ID"] if obj else None
+    """통계표에서 '총지수'(없으면 실패)로 월별 자료를 받아 그룹별(항목·보조분류) 시리즈로 분해."""
+    meta = None
+    for typ in ("ITM", "OBJ"):   # KOSIS 메타: 분류/항목은 type=ITM (항목 행의 OBJ_ID는 'ITEM')
+        try:
+            meta = kosis_meta(org, tbl, typ)
+            break
+        except Exception as e:
+            last = e
+    if meta is None:
+        raise last
+    obj = [o for o in meta if str(o.get("OBJ_ID", "")).upper() != "ITEM"]
+    if not obj:
+        raise RuntimeError("분류 메타가 비어 있음")
+    first_obj = obj[0]["OBJ_ID"]
     objs_order = []
     for o in obj:
         if o["OBJ_ID"] not in objs_order:
@@ -317,7 +328,7 @@ def kosis_table_groups(org, tbl):
     # 1분류에서 '총지수' 코드
     code1 = None
     for o in obj:
-        if o["OBJ_ID"] == first_obj and o.get("ITM_NM", "").replace(" ", "") in ("총지수", "소비자물가지수", "전국총지수"):
+        if o["OBJ_ID"] == first_obj and o.get("ITM_NM", "").replace(" ", "") in ("총지수", "소비자물가지수", "전국총지수", "자가주거비포함총지수"):
             code1 = o["ITM_ID"]
             break
     if code1 is None:
@@ -326,7 +337,8 @@ def kosis_table_groups(org, tbl):
                 code1 = o["ITM_ID"]
                 break
     if code1 is None:
-        raise RuntimeError("총지수 분류값을 찾지 못함")
+        names = [o.get("ITM_NM") for o in obj if o["OBJ_ID"] == first_obj][:6]
+        raise RuntimeError(f"총지수 분류값을 찾지 못함(1분류 예: {names})")
     params = f"&objL1={code1}"
     for k, _ in enumerate(objs_order[1:], start=2):
         params += f"&objL{k}=ALL"
@@ -403,7 +415,7 @@ def main():
 
     # 일반 CPI: 시드 kr.cpi(전년동월비)와 대조
     cpi_c = find_kosis(seed_cpi, ["소비자물가지수", "소비자물가지수 품목성질별", "소비자물가지수 총지수"],
-                       must=["소비자물가"], mustnot=["자가주거", "지역", "도시", "생활물가", "특수", "농축", "근원"], what="CPI")
+                       must=["소비자물가"], mustnot=["자가주거", "지역", "도시", "생활물가", "특수", "농축", "근원", "시도", "연쇄", "상승률", "환율", "연도별", "지출목적", "품목성질"], what="CPI")
     cpi_pick = choose_unique(cpi_c, tol=0.06, margin=0.01, what="일반 CPI")
     cpikr = cpi_pick[2]
 
