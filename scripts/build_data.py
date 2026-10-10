@@ -108,6 +108,13 @@ def choose_unique(cands, tol, margin=0.03, what=""):
     log(f"[{what}] 검증 통과 후보 {len(good)}개 (전체 {len(cands)}개, 허용 {tol})")
     for c in sorted([c for c in cands if c[0] is not None], key=lambda x: x[0])[:5]:
         log(f"    mad={c[0]:.3f}  {c[1]}")
+    nones = [c for c in cands if c[0] is None]
+    if nones:
+        log(f"    (대조 불가 {len(nones)}개 — 겹치는 구간<24개월) 예:")
+        for c in nones[:6]:
+            sx = c[2].dropna()
+            rng = f"{sx.index[0]:%Y-%m}~{sx.index[-1]:%Y-%m} n={len(sx)}" if len(sx) else "빈 시리즈"
+            log(f"      {c[1]} [{rng}]")
     if not good:
         raise RuntimeError(f"{what}: 시드와 맞는 후보가 없음 — 코드 탐색 실패(위 후보 로그 참고)")
     if len(good) > 1 and good[1][0] - good[0][0] < margin:
