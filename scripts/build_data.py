@@ -253,7 +253,7 @@ def ecos_rows(stat_code, item_code, cycle="M", start="198601"):
     end = datetime.date.today().strftime("%Y%m")
     url = (f"https://ecos.bok.or.kr/api/StatisticSearch/{ECOS_KEY}/json/kr/1/3000/"
            f"{stat_code}/{cycle}/{start}/{end}/{item_code}")
-    d = http_json(url)
+    d = http_json(url, timeout=25)
     if "StatisticSearch" not in d:
         raise RuntimeError(f"ECOS 응답 이상: {mask(json.dumps(d, ensure_ascii=False))[:200]}")
     return d["StatisticSearch"]["row"]
@@ -270,7 +270,7 @@ def ecos_m2_stat_codes():
     """ECOS 통계표 목록에서 이름에 M2/통화량/유동성이 들어간 표 + 알려진 범위(101Y/161Y 001~010)."""
     codes = {}
     try:
-        d = http_json(f"https://ecos.bok.or.kr/api/StatisticTableList/{ECOS_KEY}/json/kr/1/2000/")
+        d = http_json(f"https://ecos.bok.or.kr/api/StatisticTableList/{ECOS_KEY}/json/kr/1/1000/", timeout=40)
         rows = d["StatisticTableList"]["row"]
         log(f"  ECOS 통계표 목록 {len(rows)}개 조회")
         for r in rows:
@@ -291,10 +291,13 @@ def find_m2_ecos(seed_m2_yoy):
     cands, fetched = [], 0
     for stat, sname in ecos_m2_stat_codes().items():
         try:
-            d = http_json(f"https://ecos.bok.or.kr/api/StatisticItemList/{ECOS_KEY}/json/kr/1/300/{stat}")
+            d = http_json(f"https://ecos.bok.or.kr/api/StatisticItemList/{ECOS_KEY}/json/kr/1/300/{stat}", timeout=25)
             items = d["StatisticItemList"]["row"]
-        except Exception:
+        except Exception as e:
+            log(f"  ECOS {stat}: 항목 조회 실패({type(e).__name__})")
             continue
+        m2_items = [it for it in items if "M2" in (it.get("ITEM_NAME", "") + " " + it.get("STAT_NAME", "")).upper() and it.get("CYCLE") == "M"]
+        log(f"  ECOS {stat} '{(items[0].get('STAT_NAME','') if items else '')[:40]}': 항목 {len(items)}개 / M2 월별 {len(m2_items)}개 / 종료시점 예 {[str(i.get('END_TIME')) for i in m2_items[:3]]}")
         for it in items:
             nm = it.get("ITEM_NAME", "")
             if "M2" not in (nm + " " + it.get("STAT_NAME", "")).upper() or it.get("CYCLE") != "M":
