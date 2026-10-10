@@ -272,7 +272,7 @@ def find_m2_ecos(seed_m2_yoy):
             continue
         for it in items:
             nm = it.get("ITEM_NAME", "")
-            if "M2" in nm.upper() and it.get("CYCLE") == "M":
+            if "M2" in (nm + " " + it.get("STAT_NAME", "")).upper() and it.get("CYCLE") == "M":
                 try:
                     s = ecos_series(stat, it["ITEM_CODE"])
                 except Exception as e:
@@ -307,7 +307,7 @@ def kosis_meta(org, tbl, typ):
 
 
 def kosis_table_groups(org, tbl):
-    """통계표에서 '총지수'(없으면 실패)로 월별 자료를 받아 그룹별(항목·보조분류) 시리즈로 분해."""
+    """통계표에서 분류 차원별로 '전국'/'총지수'(없으면 ALL)를 골라 월별 자료를 받아 그룹별(항목·보조분류) 시리즈로 분해."""
     meta = None
     for typ in ("ITM", "OBJ"):   # KOSIS 메타: 분류/항목은 type=ITM (항목 행의 OBJ_ID는 'ITEM')
         try:
@@ -320,28 +320,39 @@ def kosis_table_groups(org, tbl):
     obj = [o for o in meta if str(o.get("OBJ_ID", "")).upper() != "ITEM"]
     if not obj:
         raise RuntimeError("분류 메타가 비어 있음")
-    first_obj = obj[0]["OBJ_ID"]
-    objs_order = []
-    for o in obj:
-        if o["OBJ_ID"] not in objs_order:
-            objs_order.append(o["OBJ_ID"])
-    # 1분류에서 '총지수' 코드
-    code1 = None
-    for o in obj:
-        if o["OBJ_ID"] == first_obj and o.get("ITM_NM", "").replace(" ", "") in ("총지수", "소비자물가지수", "전국총지수", "자가주거비포함총지수"):
-            code1 = o["ITM_ID"]
-            break
-    if code1 is None:
+
+    def _sn(o):
+        try:
+            return int(o.get("OBJ_ID_SN"))
+        except (TypeError, ValueError):
+            return 0
+    # 분류(차원) 순서: OBJ_ID_SN 우선, 없으면 등장 순서 → objL1, objL2, ...
+    dims = []
+    for o in sorted(obj, key=_sn):
+        if o["OBJ_ID"] not in dims:
+            dims.append(o["OBJ_ID"])
+    PREF = ("총지수", "전국", "소비자물가지수", "전국총지수", "자가주거비포함총지수")
+    params, picked = "", []
+    for k, did in enumerate(dims, start=1):
+        code = None
         for o in obj:
-            if o["OBJ_ID"] == first_obj and "총지수" in o.get("ITM_NM", ""):
-                code1 = o["ITM_ID"]
+            if o["OBJ_ID"] == did and o.get("ITM_NM", "").replace(" ", "") in PREF:
+                code = o["ITM_ID"]
+                picked.append(o.get("ITM_NM"))
                 break
-    if code1 is None:
-        names = [o.get("ITM_NM") for o in obj if o["OBJ_ID"] == first_obj][:6]
-        raise RuntimeError(f"총지수 분류값을 찾지 못함(1분류 예: {names})")
-    params = f"&objL1={code1}"
-    for k, _ in enumerate(objs_order[1:], start=2):
-        params += f"&objL{k}=ALL"
+        if code is None:
+            for o in obj:
+                if o["OBJ_ID"] == did and "총지수" in o.get("ITM_NM", ""):
+                    code = o["ITM_ID"]
+                    picked.append(o.get("ITM_NM"))
+                    break
+        params += f"&objL{k}={code if code else 'ALL'}"
+        if not code:
+            picked.append("ALL")
+    if all(x == "ALL" for x in picked):
+        names = [o.get("ITM_NM") for o in obj if o["OBJ_ID"] == dims[0]][:6]
+        raise RuntimeError(f"총지수/전국 분류값을 찾지 못함(1분류 예: {names})")
+    code1 = "/".join(str(x) for x in picked)
     end = datetime.date.today().strftime("%Y%m")
     url = (f"{KB}Param/statisticsParameterData.do?method=getList&apiKey={KOSIS_KEY}&itmId=ALL"
            f"&orgId={org}&tblId={tbl}{params}&format=json&jsonVD=Y&prdSe=M&startPrdDe=198501&endPrdDe={end}")
@@ -350,7 +361,7 @@ def kosis_table_groups(org, tbl):
         raise RuntimeError(f"KOSIS 자료 오류: {mask(json.dumps(rows, ensure_ascii=False))[:200]}")
     groups = {}
     for r in rows:
-        key = (r.get("ITM_NM", ""),) + tuple(r.get(f"C{k}_NM", "") for k in range(2, 6))
+        key = (r.get("ITM_NM", ""),) + tuple(r.get(f"C{k}_NM", "") for k in range(1, 6) if "ALL" in str(code1) or k > 1)
         v = _num(r.get("DT"))
         p = str(r.get("PRD_DE", ""))
         if len(p) < 6 or np.isnan(v):
