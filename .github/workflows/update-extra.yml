@@ -3,6 +3,13 @@ on:
   schedule:
     - cron: '25 1 * * *'   # 매일 10:25 KST — update-dashboard(10:00) 직후, cbank(6시간 주기)와 겹치지 않게
   workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/update_rates.py'
+      - 'scripts/update_dots.py'
+      - 'scripts/update_fiscal.py'
+      - 'scripts/update_delinq.py'
+      - '.github/workflows/update-extra.yml'
 permissions:
   contents: write
 jobs:
@@ -36,4 +43,5 @@ jobs:
             if [ -f "$f" ]; then git add "$f"; echo "exists: $f"; else echo "missing(skip): $f"; fi
           done
           git diff --cached --quiet || git commit -m "extra indicators auto-update $(date +%F)"
+          git pull --rebase origin main || true
           git push

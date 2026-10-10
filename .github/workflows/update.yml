@@ -4,7 +4,10 @@ on:
     - cron: '0 1 * * *'   # 매일 10:00 KST
   workflow_dispatch:
   push:
-    paths: ['data/manual/**']  # KB 엑셀 커밋 시 자동 재빌드
+    paths:
+      - 'data/manual/**'   # KB 엑셀 커밋 시 자동 재빌드
+      - 'scripts/build_data.py'
+      - 'scripts/probe_kb.py'
 permissions:
   contents: write
 jobs:
@@ -32,4 +35,5 @@ jobs:
           git config user.name sr-bot && git config user.email bot@users.noreply.github.com
           git add docs/data.js
           git diff --cached --quiet || git commit -m "data update $(date +%F)"
+          git pull --rebase origin main || true
           git push
