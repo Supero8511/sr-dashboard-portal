@@ -266,27 +266,53 @@ def ecos_series(stat_code, item_code):
     return s.sort_index()
 
 
+def ecos_m2_stat_codes():
+    """ECOS 통계표 목록에서 이름에 M2/통화량/유동성이 들어간 표 + 알려진 범위(101Y/161Y 001~010)."""
+    codes = {}
+    try:
+        d = http_json(f"https://ecos.bok.or.kr/api/StatisticTableList/{ECOS_KEY}/json/kr/1/2000/")
+        rows = d["StatisticTableList"]["row"]
+        log(f"  ECOS 통계표 목록 {len(rows)}개 조회")
+        for r in rows:
+            nm = r.get("STAT_NAME", "")
+            if r.get("STAT_CODE") and (("M2" in nm.upper()) or ("통화량" in nm) or ("유동성" in nm)):
+                codes[r["STAT_CODE"]] = nm
+    except Exception as e:
+        log(f"  ECOS 통계표 목록 조회 실패({type(e).__name__}: {mask(str(e))[:120]})")
+    for pre in ("101Y", "161Y"):
+        for n in range(1, 11):
+            codes.setdefault(f"{pre}{n:03d}", "(고정 범위)")
+    log(f"  ECOS 탐색 대상 통계표 {len(codes)}개: " + "; ".join(f"{k}={v[:30]}" for k, v in list(codes.items())[:25]))
+    return codes
+
+
 def find_m2_ecos(seed_m2_yoy):
-    """ECOS 통화량 표(101Y001~101Y010)의 항목 중 'M2' 월별 계열 후보를 모아 시드 M2 증감률과 대조."""
-    cands = []
-    for n in range(1, 11):
-        stat = f"101Y{n:03d}"
+    """ECOS 통화량 관련 표의 'M2' 월별 계열 중 최근까지 갱신되는 것만 모아 시드 M2 증감률과 대조."""
+    cands, fetched = [], 0
+    for stat, sname in ecos_m2_stat_codes().items():
         try:
-            d = http_json(f"https://ecos.bok.or.kr/api/StatisticItemList/{ECOS_KEY}/json/kr/1/200/{stat}")
+            d = http_json(f"https://ecos.bok.or.kr/api/StatisticItemList/{ECOS_KEY}/json/kr/1/300/{stat}")
             items = d["StatisticItemList"]["row"]
-        except Exception as e:
-            log(f"  ECOS {stat}: 항목 조회 실패({type(e).__name__})")
+        except Exception:
             continue
         for it in items:
             nm = it.get("ITEM_NAME", "")
-            if "M2" in (nm + " " + it.get("STAT_NAME", "")).upper() and it.get("CYCLE") == "M":
-                try:
-                    s = ecos_series(stat, it["ITEM_CODE"])
-                except Exception as e:
-                    log(f"  ECOS {stat}/{it['ITEM_CODE']} 조회 실패({type(e).__name__})")
-                    continue
-                m = mad(yoy(s), seed_m2_yoy)
-                cands.append((m, f"ECOS {stat}/{it['ITEM_CODE']} '{it.get('STAT_NAME','')}|{nm}'", s))
+            if "M2" not in (nm + " " + it.get("STAT_NAME", "")).upper() or it.get("CYCLE") != "M":
+                continue
+            end_t = str(it.get("END_TIME", ""))
+            if end_t and end_t[:4].isdigit() and int(end_t[:4]) < 2025:
+                continue   # 종료된 구 계열 제외
+            if fetched >= 150:
+                break
+            fetched += 1
+            try:
+                s = ecos_series(stat, it["ITEM_CODE"])
+            except Exception as e:
+                log(f"  ECOS {stat}/{it['ITEM_CODE']} 조회 실패({type(e).__name__})")
+                continue
+            m = mad(yoy(s), seed_m2_yoy)
+            cands.append((m, f"ECOS {stat}/{it['ITEM_CODE']} '{it.get('STAT_NAME','')}|{nm}'", s))
+    log(f"  ECOS M2 후보 시리즈 {len(cands)}개 조회")
     return cands
 
 
@@ -314,7 +340,7 @@ def kosis_meta(org, tbl, typ):
 
 
 def kosis_table_groups(org, tbl):
-    """통계표에서 분류 차원별로 '전국'/'총지수'(없으면 ALL)를 골라 월별 자료를 받아 그룹별(항목·보조분류) 시리즈로 분해."""
+    """통계표에서 '총지수'(없으면 실패)로 월별 자료를 받아 그룹별(항목·보조분류) 시리즈로 분해."""
     meta = None
     for typ in ("ITM", "OBJ"):   # KOSIS 메타: 분류/항목은 type=ITM (항목 행의 OBJ_ID는 'ITEM')
         try:
