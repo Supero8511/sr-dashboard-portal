@@ -6,8 +6,13 @@ docs/cbank.js의 FOMC 항목 중 비고가 "SEP"(경제전망 발표 회의)이�
   https://www.federalreserve.gov/monetarypolicy/fomcprojtabl{YYYYMMDD}.htm
 에서 "Federal funds rate" 중앙값(median) 행을 가져온다. 날짜(YYYYMMDD)는 그 회의의 종료일.
 
-절대 규칙: "Memo: Projected appropriate policy path" 구간에서 "Federal funds rate" 라벨과
-정확히 일치하는 행이 1개가 아니면(0개 또는 2개 이상 — 비교용 "~월 projection" 행과 혼동 위험),
+표 구조(Table 1): 헤더 2줄(Variable | Median | Central Tendency | Range, 그 아래 연도 행 —
+각 그룹마다 2026 2027 2028 2029 Longer run 반복) → 변수 행들 → "Memo: Projected appropriate policy
+path" → "Federal funds rate" 행. 즉 연도 헤더는 Memo 행의 '위'에 있다.
+연준 HTML은 </td>를 생략하는 경우가 있어 파서가 암묵적 셀 종료를 처리한다.
+
+절대 규칙: "Memo: Projected appropriate policy path" 아래 "Federal funds rate" 라벨과 정확히 일치하는
+행이 1개가 아니면(0개 또는 2개 이상 — 비교용 "~월 projection" 행과 혼동 위험),
 또는 연도 헤더를 명확히 못 찾으면, 그 회의는 건너뛰고 다음 실행에서 재시도한다. 추정 금지.
 """
 import os, re, sys, json, datetime, urllib.request
@@ -32,7 +37,7 @@ def _parse_entry(entry_text):
     return [m.group(1) if m.group(0) != "null" else None for m in _ELEM_RE.finditer(inner)]
 
 def fomc_sep_meetings():
-    """[(decision_date: date, id_str: 'YYYYMMDD'), ...] — cbank.js의 fomc 배열 전체(연도 무관)에서
+    """[decision_date: date, ...] — cbank.js의 fomc 배열 전체(연도 무관)에서
     비고(3번째 요소)가 'SEP'인 항목만."""
     text = open(CBANK_PATH, encoding="utf-8").read()
     out = []
@@ -71,7 +76,9 @@ def fomc_sep_meetings():
 # ───────────────────────── 연준 SEP 표 파싱 ─────────────────────────
 
 class _TableCellCollector(HTMLParser):
-    """표를 행(row) 단위 셀 텍스트 리스트로 단순화. <sup>(각주)</sup> 내용은 제외."""
+    """표를 행(row) 단위 셀 텍스트 리스트로 단순화. <sup>(각주)</sup> 내용은 제외.
+    </td>·</tr>가 생략된 HTML(암묵적 종료)도 처리: 새 <td>/<th>/<tr>/<table>이 시작되면
+    진행 중이던 셀·행을 먼저 마감한다."""
     def __init__(self):
         super().__init__()
         self.rows = []
@@ -79,30 +86,51 @@ class _TableCellCollector(HTMLParser):
         self._cur_cell = None
         self._in_sup = 0
 
+    def _flush_cell(self):
+        if self._cur_cell is not None:
+            txt = re.sub(r"\s+", " ", "".join(self._cur_cell).replace("\xa0", " ")).strip()
+            if self._cur_row is not None:
+                self._cur_row.append(txt)
+            self._cur_cell = None
+        self._in_sup = 0
+
+    def _flush_row(self):
+        self._flush_cell()
+        if self._cur_row is not None:
+            self.rows.append(self._cur_row)
+            self._cur_row = None
+
     def handle_starttag(self, tag, attrs):
-        if tag == "tr":
+        if tag == "table":
+            self._flush_row()
+        elif tag == "tr":
+            self._flush_row()
             self._cur_row = []
         elif tag in ("td", "th"):
+            self._flush_cell()
+            if self._cur_row is None:
+                self._cur_row = []
             self._cur_cell = []
         elif tag == "sup":
             self._in_sup += 1
 
     def handle_endtag(self, tag):
-        if tag == "tr" and self._cur_row is not None:
-            self.rows.append(self._cur_row)
-            self._cur_row = None
-        elif tag in ("td", "th") and self._cur_cell is not None:
-            txt = "".join(self._cur_cell).strip()
-            txt = re.sub(r"\s+", " ", txt)
-            if self._cur_row is not None:
-                self._cur_row.append(txt)
-            self._cur_cell = None
+        if tag == "tr":
+            self._flush_row()
+        elif tag in ("td", "th"):
+            self._flush_cell()
+        elif tag == "table":
+            self._flush_row()
         elif tag == "sup":
             self._in_sup = max(0, self._in_sup - 1)
 
     def handle_data(self, data):
         if self._cur_cell is not None and not self._in_sup:
             self._cur_cell.append(data)
+
+    def close(self):
+        super().close()
+        self._flush_row()
 
 _NUM_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 _YEAR_RE = re.compile(r"^(19|20)\d{2}$")
@@ -118,13 +146,18 @@ def fetch_sep_median(decision_date):
         return None, f"페이지 조회 실패({url}): {e}"
     return _parse_sep_html(html)
 
+def _is_year_header(row):
+    years = [c for c in row if _YEAR_RE.match(c)]
+    has_longrun = any("longer" in c.lower() for c in row)
+    return len(years) >= 3 and has_longrun
+
 def _parse_sep_html(html):
     p = _TableCellCollector()
     p.feed(html)
+    p.close()
     rows = p.rows
 
-    # "Memo: Projected appropriate policy path" 행 위치를 찾고, 그 아래에서
-    # 연도 헤더 행과 "Federal funds rate" 행을 찾는다.
+    # "Memo: Projected appropriate policy path" 행 위치
     memo_idx = None
     for i, row in enumerate(rows):
         if any("memo" in c.lower() and "policy path" in c.lower() for c in row):
@@ -133,46 +166,55 @@ def _parse_sep_html(html):
     if memo_idx is None:
         return None, "Memo: Projected appropriate policy path 구간을 찾지 못함"
 
-    # 연도 헤더: memo_idx 이후 가까운 행 중, 4자리 연도가 2개 이상 + "longer" 포함 셀이 있는 행
+    # 연도 헤더: 같은 표에서 Memo 행 '위'로 가장 가까운 행(표 1은 헤더 2줄 + 변수행 8줄 뒤에 Memo 행).
+    # 다른 표(Figure 등)의 헤더와 섞이지 않도록 'Variable' 헤더 행(또는 표 시작)을 만나면 중단한다.
     year_header = None
-    for row in rows[memo_idx:memo_idx + 6]:
-        years = [c for c in row if _YEAR_RE.match(c)]
-        has_longrun = any("longer" in c.lower() for c in row)
-        if len(years) >= 3 and has_longrun:
-            year_header = row
+    for j in range(memo_idx - 1, max(-1, memo_idx - 20), -1):
+        if _is_year_header(rows[j]):
+            year_header = rows[j]
             break
     if year_header is None:
-        return None, "연도 헤더 행을 찾지 못함"
-    # Median 그룹은 표의 첫 번째 연도 그룹(가장 앞쪽 "Longer run"까지) — Central Tendency·Range
-    # 그룹의 중복된 연도 헤더까지 섞이지 않도록 첫 "Longer run" 열까지만 사용한다.
+        return None, "Memo 행 위에서 연도 헤더 행을 찾지 못함"
+
+    # Median 그룹은 표의 첫 번째 연도 그룹(첫 "Longer run" 열까지) — Central Tendency·Range 그룹의
+    # 반복 헤더와 섞이지 않게 한다.
     first_longrun_idx = next((i for i, c in enumerate(year_header) if "longer" in c.lower()), None)
     if first_longrun_idx is None:
         return None, "Longer run 열을 찾지 못함"
     year_cols = [c for c in year_header[:first_longrun_idx + 1] if _YEAR_RE.match(c) or "longer" in c.lower()]
-    if len(year_cols) < 4:
+    n = len(year_cols)
+    if n < 4:
         return None, f"Median 그룹 연도 열이 너무 적음({year_cols})"
+    # 헤더 전체가 (Median, Central Tendency, Range) 3개 그룹으로 반복되는 구조인지 확인
+    total_cols = len([c for c in year_header if _YEAR_RE.match(c) or "longer" in c.lower()])
+    if total_cols != 3 * n:
+        return None, f"연도 헤더가 3개 그룹 반복 구조가 아님(총 {total_cols}열, 그룹당 {n}열) — skip"
 
-    # "Federal funds rate" 행: memo_idx 이후 전체에서 라벨이 정확히 일치하는 행이 1개여야 함
+    # "Federal funds rate" 행: memo_idx 이후, 같은 표 안(다음 'Variable' 헤더 전)에서
+    # 라벨이 정확히 일치하는 행이 1개여야 함
     matches = []
-    for row in rows[memo_idx:]:
+    for row in rows[memo_idx + 1:]:
         if not row:
             continue
-        label = row[0].strip().lower()
-        if label == "federal funds rate":
+        if row[0].strip().lower() == "variable":
+            break  # 다음 표 시작
+        if row[0].strip().lower() == "federal funds rate":
             matches.append(row)
     if len(matches) != 1:
         return None, f"'Federal funds rate' 행 매칭 {len(matches)}건 — 명확하지 않아 skip"
     ffr_row = matches[0]
 
-    data_cells = ffr_row[1:1 + len(year_cols)]
-    if len(data_cells) < len(year_cols):
-        return None, "Federal funds rate 행의 셀 수가 연도 헤더보다 적음"
-
+    cells = ffr_row[1:]
+    if len(cells) != 3 * n:
+        return None, f"Federal funds rate 행 셀 수({len(cells)})가 헤더({3 * n})와 다름 — skip"
+    data_cells = cells[:n]
+    # 구조 검증: 두 번째 그룹(Central Tendency)의 첫 셀은 범위값(– 또는 -)이거나 단일값이어야 함 —
+    # Median 그룹 셀은 반드시 단일 숫자여야 한다(아래에서 검사).
     median = {}
     for yc, cell in zip(year_cols, data_cells):
         cell = cell.strip()
         key = "longrun" if "longer" in yc.lower() else yc
-        if cell == "" or cell == "—" or cell == "-":
+        if cell == "" or cell in ("—", "-", "–"):
             median[key] = None
             continue
         if not _NUM_RE.match(cell):
