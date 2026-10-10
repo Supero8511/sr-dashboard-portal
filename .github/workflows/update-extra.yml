@@ -17,7 +17,9 @@ jobs:
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
-        run: python scripts/update_rates.py
+        run: |
+          echo "FRED_API_KEY set: $([ -n "$FRED_API_KEY" ] && echo yes || echo NO) / ECOS_API_KEY set: $([ -n "$ECOS_API_KEY" ] && echo yes || echo NO)"
+          python scripts/update_rates.py
       - name: update 연준 점도표 SEP (dots.js)
         run: python scripts/update_dots.py
       - name: update 재정적자 (fiscal.js)
@@ -29,6 +31,9 @@ jobs:
       - name: commit
         run: |
           git config user.name sr-bot && git config user.email bot@users.noreply.github.com
-          git add docs/rates.js docs/dots.js docs/fiscal.js docs/delinq.js
+          # 존재하는 파일만 add (스크립트가 skip해서 파일이 없을 수 있음 — pathspec 오류 방지)
+          for f in docs/rates.js docs/dots.js docs/fiscal.js docs/delinq.js; do
+            if [ -f "$f" ]; then git add "$f"; echo "exists: $f"; else echo "missing(skip): $f"; fi
+          done
           git diff --cached --quiet || git commit -m "extra indicators auto-update $(date +%F)"
           git push
