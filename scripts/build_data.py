@@ -267,54 +267,58 @@ def ecos_series(stat_code, item_code):
 
 
 def ecos_m2_stat_codes():
-    """ECOS 통계표 목록에서 이름에 M2/통화량/유동성이 들어간 표 + 알려진 범위(101Y/161Y 001~010)."""
+    """ECOS 통계표 목록에서 이름에 M2가 들어간 '데이터 표'(상위 노드 0000… 제외). 목록 조회 실패 시 알려진 범위."""
     codes = {}
     try:
         d = http_json(f"https://ecos.bok.or.kr/api/StatisticTableList/{ECOS_KEY}/json/kr/1/1000/", timeout=40)
         rows = d["StatisticTableList"]["row"]
         log(f"  ECOS 통계표 목록 {len(rows)}개 조회")
         for r in rows:
-            nm = r.get("STAT_NAME", "")
-            if r.get("STAT_CODE") and (("M2" in nm.upper()) or ("통화량" in nm) or ("유동성" in nm)):
-                codes[r["STAT_CODE"]] = nm
+            nm, cd = r.get("STAT_NAME", ""), r.get("STAT_CODE", "")
+            if cd and not cd.startswith("0000") and "M2" in nm.upper():
+                codes[cd] = nm
     except Exception as e:
         log(f"  ECOS 통계표 목록 조회 실패({type(e).__name__}: {mask(str(e))[:120]})")
-    for pre in ("101Y", "161Y"):
-        for n in range(1, 11):
-            codes.setdefault(f"{pre}{n:03d}", "(고정 범위)")
-    log(f"  ECOS 탐색 대상 통계표 {len(codes)}개: " + "; ".join(f"{k}={v[:30]}" for k, v in list(codes.items())[:25]))
+    if not codes:
+        for n in range(5, 15):
+            codes[f"161Y{n:03d}"] = "(고정 범위)"
+    log(f"  ECOS 탐색 대상 통계표 {len(codes)}개: " + "; ".join(f"{k}={v[:28]}" for k, v in codes.items()))
     return codes
 
 
 def find_m2_ecos(seed_m2_yoy):
-    """ECOS 통화량 관련 표의 'M2' 월별 계열 중 최근까지 갱신되는 것만 모아 시드 M2 증감률과 대조."""
-    cands, fetched = [], 0
-    for stat, sname in ecos_m2_stat_codes().items():
+    """M2 표에서 항목명에 'M2'가 든 월별 계열(총량)만, 최근까지 갱신되는 것에 한해 조회해 시드 M2 증감률과 대조."""
+    import time
+    t0 = time.time()
+    cands = []
+    for stat in ecos_m2_stat_codes():
+        if time.time() - t0 > 420:
+            log("  ECOS 탐색 시간 초과 — 지금까지의 후보로 진행")
+            break
         try:
             d = http_json(f"https://ecos.bok.or.kr/api/StatisticItemList/{ECOS_KEY}/json/kr/1/300/{stat}", timeout=25)
             items = d["StatisticItemList"]["row"]
         except Exception as e:
             log(f"  ECOS {stat}: 항목 조회 실패({type(e).__name__})")
             continue
-        m2_items = [it for it in items if "M2" in (it.get("ITEM_NAME", "") + " " + it.get("STAT_NAME", "")).upper() and it.get("CYCLE") == "M"]
-        log(f"  ECOS {stat} '{(items[0].get('STAT_NAME','') if items else '')[:40]}': 항목 {len(items)}개 / M2 월별 {len(m2_items)}개 / 종료시점 예 {[str(i.get('END_TIME')) for i in m2_items[:3]]}")
+        sel = []
         for it in items:
-            nm = it.get("ITEM_NAME", "")
-            if "M2" not in (nm + " " + it.get("STAT_NAME", "")).upper() or it.get("CYCLE") != "M":
-                continue
             end_t = str(it.get("END_TIME", ""))
-            if end_t and end_t[:4].isdigit() and int(end_t[:4]) < 2025:
-                continue   # 종료된 구 계열 제외
-            if fetched >= 150:
-                break
-            fetched += 1
+            if it.get("CYCLE") != "M" or "M2" not in it.get("ITEM_NAME", "").upper():
+                continue
+            if end_t[:4].isdigit() and int(end_t[:4]) < 2025:
+                continue
+            sel.append(it)
+        log(f"  ECOS {stat}: 항목 {len(items)}개 → 조회 대상 {len(sel)}개 {[(i['ITEM_CODE'], i['ITEM_NAME'][:24]) for i in sel[:4]]}")
+        for it in sel:
             try:
                 s = ecos_series(stat, it["ITEM_CODE"])
             except Exception as e:
                 log(f"  ECOS {stat}/{it['ITEM_CODE']} 조회 실패({type(e).__name__})")
                 continue
             m = mad(yoy(s), seed_m2_yoy)
-            cands.append((m, f"ECOS {stat}/{it['ITEM_CODE']} '{it.get('STAT_NAME','')}|{nm}'", s))
+            log(f"    {stat}/{it['ITEM_CODE']} {s.index[0]:%Y-%m}~{s.index[-1]:%Y-%m} n={len(s)} mad={m}")
+            cands.append((m, f"ECOS {stat}/{it['ITEM_CODE']} '{it.get('STAT_NAME','')}|{it.get('ITEM_NAME','')}'", s))
     log(f"  ECOS M2 후보 시리즈 {len(cands)}개 조회")
     return cands
 
